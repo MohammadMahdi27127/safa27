@@ -1,0 +1,15 @@
+﻿# پایتون و جنگو
+venv/
+__pycache__/
+*.pyc
+db.sqlite3
+media/
+credentials.json
+
+# فرانت‌اند
+frontend/node_modules/
+frontend/dist/
+
+# متفرقه
+.env
+.vscode/
