@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-export const API_ORIGIN = 'http://127.0.0.1:8000';
+export const API_ORIGIN = 'https://safa27.darkube.ir';
 
 export function mediaUrl(path?: string | null): string | null {
   if (!path) return null;
