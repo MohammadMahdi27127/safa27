@@ -1,18 +1,19 @@
-# مرحله اول: بیلد فرانت
+# مرحله اول: بیلد پروژه فرانت
 FROM node:20-alpine AS builder
 WORKDIR /app
 
-COPY package*.json ./
+# کپی فایل‌های پکیج از پوشه frontend
+COPY frontend/package*.json ./
 RUN npm install
 
-COPY . .
+# کپی کل سورس فرانت‌اند
+COPY frontend/ .
 RUN npm run build
 
-# مرحله دوم: سرو با وب‌سرور Nginx
+# مرحله دوم: اجرا با Nginx
 FROM nginx:alpine
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-# تنظیم روتینگ برای پروژه‌های SPA (حل مشکل رفرش در مسیرهایی مثل /login)
 RUN echo 'server { \
     listen 80; \
     location / { \
