@@ -1,5 +1,5 @@
 venv
 __pycache__
 *.pyc
-media
+
 frontend/node_modules
