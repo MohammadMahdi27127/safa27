@@ -1,15 +1,15 @@
-import gspread
 import os
-import json
 import logging
+import csv
+import urllib.request
+import io
 from django.core.cache import cache
 from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
-# مقادیر پیش‌فرض برای SHEET_ID و WORKSHEET_GID
-DEFAULT_SHEET_ID = "1LFe8XI4vdu_-LfMQEPkRxqewg5_BX3BJo-f7NPwmcA4"
-DEFAULT_WORKSHEET_GID = 643360414
+# لینک پیش‌فرض CSV (در صورت عدم تنظیم متغیر محیطی)
+DEFAULT_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vS1WFrSNKyyvQcgOGzxSZ6o9w-Ci1brshZgEr8RxZ5t6uI2h8I1KYpfldeE5kf4TVpMndzUp9w5fi6J/pub?gid=643360414&single=true&output=csv"
 
 def normalize_code(code):
     """
@@ -37,65 +37,39 @@ def normalize_code(code):
     
     return code
 
-def get_sheet_client():
-    """
-    ایجاد کلاینت gspread با مدیریت صحیح متغیرهای محیطی و فایل محلی
-    """
-    creds_str = os.environ.get("GOOGLE_CREDENTIALS_JSON")
-    
-    try:
-        if creds_str:
-            # خواندن از متغیر محیطی
-            creds_dict = json.loads(creds_str)
-            # اصلاح کاراکترهای اسکیپ‌شده در کلید خصوصی
-            if 'private_key' in creds_dict:
-                creds_dict['private_key'] = creds_dict['private_key'].replace('\\n', '\n')
-            return gspread.service_account_from_dict(creds_dict)
-        
-        # مسیر مطلق فایل credentials.json در ریشه پروژه
-        creds_path = os.path.join(settings.BASE_DIR, 'credentials.json')
-        if os.path.exists(creds_path):
-            with open(creds_path, 'r', encoding='utf-8') as f:
-                creds_dict = json.load(f)
-                if 'private_key' in creds_dict:
-                    creds_dict['private_key'] = creds_dict['private_key'].replace('\\n', '\n')
-                return gspread.service_account_from_dict(creds_dict)
-        
-        raise FileNotFoundError(f"Credentials not found in environment or at {creds_path}")
-        
-    except Exception as e:
-        logger.error(f"Failed to initialize Google Sheets client: {str(e)}", exc_info=True)
-        raise
-
 def get_all_sheet_matrix():
+    """
+    دریافت ماتریس داده‌ها از لینک CSV گوگل‌شیت با سیستم کشینگ
+    """
     cache_key = "google_sheet_all_matrix"
     cached = cache.get(cache_key)
     if cached is not None:
         return cached
 
-    # خواندن شناسه‌ها از متغیر محیطی یا استفاده از مقادیر پیش‌فرض
-    sheet_id = os.environ.get("SHEET_ID", DEFAULT_SHEET_ID)
-    worksheet_gid = os.environ.get("WORKSHEET_GID", str(DEFAULT_WORKSHEET_GID))
+    csv_url = os.environ.get("GOOGLE_SHEET_CSV_URL", DEFAULT_CSV_URL)
 
     try:
-        client = get_sheet_client()
-        sh = client.open_by_key(sheet_id)
+        # فراخوانی زنده لینک CSV
+        logger.info(f"Fetching live CSV from Google Sheets...")
+        with urllib.request.urlopen(csv_url, timeout=15) as response:
+            content = response.read().decode('utf-8')
+            
+        # پارس کردن محتوا به صورت ماتریس دو بعدی
+        f = io.StringIO(content)
+        reader = csv.reader(f)
+        all_rows = list(reader)
         
-        # تلاش برای دریافت ورک‌شیت با ID
-        try:
-            sheet = sh.get_worksheet_by_id(int(worksheet_gid))
-        except (ValueError, TypeError):
-            sheet = None
-            
-        if not sheet:
-            logger.warning(f"Worksheet with GID {worksheet_gid} not found. Falling back to sheet1.")
-            sheet = sh.sheet1
-            
-        all_rows = sheet.get_all_values()
+        if not all_rows:
+            logger.error("Fetched CSV content is empty.")
+            return None
+
+        # ذخیره در کش برای ۱۰ دقیقه (۶۰۰ ثانیه)
         cache.set(cache_key, all_rows, timeout=600)
+        logger.info("Sheet data cached for 10 minutes.")
         return all_rows
+
     except Exception as e:
-        logger.error(f"Google Sheet Fetch Error: {str(e)}", exc_info=True)
+        logger.error(f"Error fetching/parsing CSV from Google Sheets: {str(e)}", exc_info=True)
         return None
 
 def get_user_sheet_info_by_code(group_code: str):
