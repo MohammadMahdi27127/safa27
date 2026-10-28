@@ -5,6 +5,13 @@ SHEET_ID = "1LFe8XI4vdu_-LfMQEPkRxqewg5_BX3BJo-f7NPwmcA4"
 WORKSHEET_GID = 643360414
 
 def get_sheet_client():
+    creds_str = os.environ.get("GOOGLE_CREDENTIALS_JSON")
+    if creds_str:
+        # خواندن مستقیم از متغیر محیطی سرور
+        creds_dict = json.loads(creds_str)
+        return gspread.service_account_from_dict(creds_dict)
+    
+    # حالت پیش‌فرض برای اجرای لوکال
     return gspread.service_account(filename="credentials.json")
 
 def get_all_sheet_matrix():
