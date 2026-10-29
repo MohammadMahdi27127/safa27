@@ -127,6 +127,7 @@ class CustomFormSerializer(serializers.ModelSerializer):
     workgroup_name = serializers.CharField(source='workgroup.name', read_only=True)
     is_expired = serializers.SerializerMethodField()
     responses_count = serializers.SerializerMethodField()
+    workgroup_id = serializers.IntegerField(write_only=True, required=False)  # ✅ برای دریافت workgroup_id از فرانت
 
     class Meta:
         model = CustomForm
@@ -134,15 +135,22 @@ class CustomFormSerializer(serializers.ModelSerializer):
             'id', 'creator', 'creator_name', 'workgroup', 'workgroup_name',
             'title', 'description', 'export_interval_days', 'expiration_date',
             'fields_schema', 'is_active', 'is_expired', 'responses_count',
-            'created_at', 'updated_at'
+            'created_at', 'updated_at', 'workgroup_id'
         ]
-        read_only_fields = ['id', 'is_active', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'is_active', 'created_at', 'updated_at', 'creator']
 
     def get_is_expired(self, obj):
         return obj.is_expired()
 
     def get_responses_count(self, obj):
         return obj.responses.count()
+
+    def create(self, validated_data):
+        """✅ اگر workgroup_id ارسال شد، تنظیم کن"""
+        workgroup_id = validated_data.pop('workgroup_id', None)
+        if workgroup_id:
+            validated_data['workgroup_id'] = workgroup_id
+        return super().create(validated_data)
 
 
 class CustomFormResponseSerializer(serializers.ModelSerializer):

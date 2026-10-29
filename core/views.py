@@ -652,10 +652,22 @@ class CustomFormCreateView(generics.CreateAPIView):
         if not self.request.user.is_workgroup_leader:
             raise PermissionError('فقط مسئول کارگروه می‌تواند فرم سفارشی ایجاد کند.')
         
-        # اگر کاربر مسئول کارگروه است، کارگروه‌اش را استخراج کن
+        # ✅ اگر workgroup_id در داده‌های ارسالی بود، از آن استفاده کن
         workgroup = None
-        if hasattr(self.request.user, 'led_workgroup') and self.request.user.led_workgroup:
-            workgroup = self.request.user.led_workgroup
+        workgroup_id = self.request.data.get('workgroup_id')
+        
+        if workgroup_id:
+            try:
+                workgroup = Workgroup.objects.get(id=workgroup_id)
+                # تأیید اینکه کاربر مسئول این کارگروه است
+                if self.request.user.led_workgroup != workgroup:
+                    raise PermissionError('شما مسئول این کارگروه نیستید.')
+            except Workgroup.DoesNotExist:
+                raise ValueError('کارگروه پیدا نشد.')
+        else:
+            # یا از کارگروه موجود کاربر استفاده کن
+            if hasattr(self.request.user, 'led_workgroup') and self.request.user.led_workgroup:
+                workgroup = self.request.user.led_workgroup
         
         if not workgroup:
             raise ValueError('مسئول کارگروه باید کارگروه‌ای را رهبری کند.')
@@ -791,6 +803,7 @@ class CustomFormExportExcelView(views.APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, form_id):
+        from django.http import HttpResponse
         from django.utils import timezone
         from datetime import timedelta
         import logging
@@ -844,7 +857,8 @@ class CustomFormExportExcelView(views.APIView):
             from .export_utils import export_form_responses_to_excel_with_date_range
             file_content, filename = export_form_responses_to_excel_with_date_range(form, responses, days_back)
             
-            response = Response(
+            # ✅ بازگشت HttpResponse مستقیم به جای Response
+            response = HttpResponse(
                 file_content,
                 content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
             )
@@ -872,6 +886,7 @@ class SkillsExportExcelView(views.APIView):
     TRAINING_MANAGER_CODE = '27118'  # کد گروهی مسئول آموزش
 
     def get(self, request):
+        from django.http import HttpResponse
         import logging
         logger = logging.getLogger(__name__)
         
@@ -937,7 +952,8 @@ class SkillsExportExcelView(views.APIView):
                     reference_date=reference_date
                 )
 
-                response = Response(
+                # ✅ بازگشت HttpResponse مستقیم به جای Response
+                response = HttpResponse(
                     file_content,
                     content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
                 )

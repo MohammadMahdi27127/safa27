@@ -39,7 +39,7 @@ urlpatterns = [
     path('manager/send-message/', ManagerSendMessageView.as_view(), name='manager-send-message'),
     
     # Custom Form endpoints
-    path('custom-forms/', CustomFormCreateView.as_view(), name='custom-form-create'),
+    path('custom-forms/create/', CustomFormCreateView.as_view(), name='custom-form-create'),
     path('custom-forms/list/', CustomFormListView.as_view(), name='custom-form-list'),
     path('custom-forms/<int:pk>/', CustomFormDetailView.as_view(), name='custom-form-detail'),
     path('custom-forms/active/', ActiveCustomFormsView.as_view(), name='active-custom-forms'),
