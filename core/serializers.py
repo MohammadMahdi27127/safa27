@@ -124,10 +124,10 @@ class AnnouncementAndNotificationSerializer(serializers.ModelSerializer):
 class CustomFormSerializer(serializers.ModelSerializer):
     """سریالایزر برای فرم‌های سفارشی"""
     creator_name = serializers.CharField(source='creator.full_name', read_only=True)
-    workgroup_name = serializers.CharField(source='workgroup.name', read_only=True)
+    workgroup_name = serializers.CharField(source='workgroup.name', read_only=True, allow_null=True)
     is_expired = serializers.SerializerMethodField()
     responses_count = serializers.SerializerMethodField()
-    workgroup_id = serializers.IntegerField(write_only=True, required=False)  # ✅ برای دریافت workgroup_id از فرانت
+    workgroup_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)  # ✅ اختیاری
 
     class Meta:
         model = CustomForm
@@ -145,8 +145,30 @@ class CustomFormSerializer(serializers.ModelSerializer):
     def get_responses_count(self, obj):
         return obj.responses.count()
 
+    def validate_title(self, value):
+        """✅ اطمینان از موجود بودن عنوان"""
+        if not value or not value.strip():
+            raise serializers.ValidationError("عنوان فرم نمی‌تواند خالی باشد.")
+        return value.strip()
+
+    def validate_fields_schema(self, value):
+        """✅ اطمینان از موجود بودن حداقل یک فیلد"""
+        if not isinstance(value, list):
+            raise serializers.ValidationError("fields_schema باید یک لیست باشد.")
+        if len(value) == 0:
+            raise serializers.ValidationError("فرم باید حداقل یک فیلد داشته باشد.")
+        return value
+
+    def validate_expiration_date(self, value):
+        """✅ اطمینان از معتبری تاریخ انقضا"""
+        if value:
+            from django.utils import timezone
+            if value <= timezone.now():
+                raise serializers.ValidationError("تاریخ انقضا باید در آینده باشد.")
+        return value
+
     def create(self, validated_data):
-        """✅ اگر workgroup_id ارسال شد، تنظیم کن"""
+        """✅ هندل کردن workgroup_id"""
         workgroup_id = validated_data.pop('workgroup_id', None)
         if workgroup_id:
             validated_data['workgroup_id'] = workgroup_id

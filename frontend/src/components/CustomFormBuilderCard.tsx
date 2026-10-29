@@ -132,12 +132,12 @@ export const CustomFormBuilderCard: React.FC<CustomFormBuilderCardProps> = ({
     setMessage('');
 
     try {
+      // ✅ payload بدون workgroup_id (فرم همگانی)
       const payload = {
         title: formTitle,
         description: formDescription,
         expiration_date: expirationDate,
-        fields_schema: fields,
-        workgroup_id: workgroupId
+        fields_schema: fields
       };
 
       const response = await API.post('custom-forms/create/', payload);
@@ -153,11 +153,18 @@ export const CustomFormBuilderCard: React.FC<CustomFormBuilderCardProps> = ({
           setExpirationDate('');
           setFields([]);
           setMessage('');
+          fetchPublishedForms();
         }, 1500);
       }
     } catch (err: any) {
       console.error('Error publishing form:', err);
-      const errorMsg = err.response?.data?.error || 'خطا در انتشار فرم. لطفاً دوباره تلاش کنید.';
+      // ✅ نمایش دقیق پیام خطا از بک‌اند
+      const errorMsg = err.response?.data?.error || 
+                      err.response?.data?.details ||
+                      err.response?.data?.title?.[0] ||
+                      err.response?.data?.expiration_date?.[0] ||
+                      err.response?.data?.fields_schema?.[0] ||
+                      'خطا در انتشار فرم. لطفاً دوباره تلاش کنید.';
       setMessage(errorMsg);
       setMessageType('error');
     } finally {

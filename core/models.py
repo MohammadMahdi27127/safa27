@@ -233,7 +233,10 @@ class CustomForm(models.Model):
         Workgroup,
         on_delete=models.CASCADE,
         related_name='custom_forms',
-        verbose_name="کارگروه"
+        verbose_name="کارگروه",
+        null=True,
+        blank=True,
+        help_text="اختیاری - اگر خالی باشد، فرم برای همه کاربران قابل دسترس است"
     )
     title = models.CharField(max_length=255, verbose_name="عنوان فرم")
     description = models.TextField(blank=True, null=True, verbose_name="توضیحات")
@@ -245,8 +248,13 @@ class CustomForm(models.Model):
         verbose_name="دوره تجمیع داده‌ها (روز)"
     )
     
-    # Expiration settings
-    expiration_date = models.DateTimeField(verbose_name="تاریخ انقضای فرم")
+    # Expiration settings - اختیاری
+    expiration_date = models.DateTimeField(
+        verbose_name="تاریخ انقضای فرم",
+        null=True,
+        blank=True,
+        help_text="اگر خالی باشد، فرم هیچ وقت منقضی نمی‌شود"
+    )
     
     # Dynamic fields schema as JSON
     fields_schema = models.JSONField(
@@ -268,17 +276,22 @@ class CustomForm(models.Model):
         verbose_name_plural = "فرم‌های سفارشی"
 
     def __str__(self):
-        return f"{self.title} - {self.workgroup.name}"
+        if self.workgroup:
+            return f"{self.title} - {self.workgroup.name}"
+        return f"{self.title} - (همگانی)"
 
     def is_expired(self):
         """بررسی اینکه آیا فرم منقضی شده است"""
         from django.utils import timezone
+        if not self.expiration_date:
+            return False
         return timezone.now() > self.expiration_date
 
     def save(self, *args, **kwargs):
         """به‌روزرسانی خودکار وضعیت is_active بر اساس expiration_date"""
         from django.utils import timezone
-        self.is_active = timezone.now() <= self.expiration_date
+        if self.expiration_date:
+            self.is_active = timezone.now() <= self.expiration_date
         super().save(*args, **kwargs)
 
 

@@ -643,36 +643,67 @@ class ManagerDashboardView(views.APIView):
 
 
 class CustomFormCreateView(generics.CreateAPIView):
-    """سازنده فرم‌های سفارشی - فقط برای مسئولین کارگروه"""
+    """سازنده فرم‌های سفارشی - برای مسئولین کارگروه"""
     permission_classes = [IsAuthenticated]
     serializer_class = CustomFormSerializer
 
     def perform_create(self, serializer):
-        # تأیید اینکه کاربر مسئول کارگروه است
-        if not self.request.user.is_workgroup_leader:
-            raise PermissionError('فقط مسئول کارگروه می‌تواند فرم سفارشی ایجاد کند.')
+        import logging
+        logger = logging.getLogger(__name__)
         
-        # ✅ اگر workgroup_id در داده‌های ارسالی بود، از آن استفاده کن
-        workgroup = None
-        workgroup_id = self.request.data.get('workgroup_id')
+        try:
+            # تأیید اینکه کاربر مسئول کارگروه است
+            if not self.request.user.is_workgroup_leader:
+                raise PermissionError('فقط مسئول کارگروه می‌تواند فرم سفارشی ایجاد کند.')
+            
+            # ✅ workgroup را از درخواست یا از کاربر استخراج کن (هر دو اختیاری)
+            workgroup = None
+            workgroup_id = self.request.data.get('workgroup_id')
+            
+            if workgroup_id:
+                try:
+                    workgroup = Workgroup.objects.get(id=workgroup_id)
+                    # تأیید اینکه کاربر مسئول این کارگروه است
+                    if self.request.user.led_workgroup != workgroup:
+                        raise PermissionError('شما مسئول این کارگروه نیستید.')
+                except Workgroup.DoesNotExist:
+                    logger.warning(f'Workgroup not found: {workgroup_id}')
+                    # اگر workgroup پیدا نشد، اما برای خود مسئول تلاش کن
+                    if hasattr(self.request.user, 'led_workgroup'):
+                        workgroup = self.request.user.led_workgroup
+            else:
+                # اگر workgroup_id ارسال نشد، از کارگروه مسئول استفاده کن
+                if hasattr(self.request.user, 'led_workgroup'):
+                    workgroup = self.request.user.led_workgroup
+            
+            # workgroup می‌تواند None باشد (فرم همگانی)
+            logger.info(f'Creating custom form with workgroup: {workgroup}')
+            serializer.save(creator=self.request.user, workgroup=workgroup)
+            
+        except PermissionError as e:
+            logger.error(f'Permission error creating form: {str(e)}')
+            raise PermissionError(str(e))
+        except Exception as e:
+            logger.error(f'Error creating form: {str(e)}', exc_info=True)
+            raise
+
+    def post(self, request, *args, **kwargs):
+        """✅ اضافه کردن exception handling صریح"""
+        import logging
+        logger = logging.getLogger(__name__)
         
-        if workgroup_id:
-            try:
-                workgroup = Workgroup.objects.get(id=workgroup_id)
-                # تأیید اینکه کاربر مسئول این کارگروه است
-                if self.request.user.led_workgroup != workgroup:
-                    raise PermissionError('شما مسئول این کارگروه نیستید.')
-            except Workgroup.DoesNotExist:
-                raise ValueError('کارگروه پیدا نشد.')
-        else:
-            # یا از کارگروه موجود کاربر استفاده کن
-            if hasattr(self.request.user, 'led_workgroup') and self.request.user.led_workgroup:
-                workgroup = self.request.user.led_workgroup
-        
-        if not workgroup:
-            raise ValueError('مسئول کارگروه باید کارگروه‌ای را رهبری کند.')
-        
-        serializer.save(creator=self.request.user, workgroup=workgroup)
+        try:
+            return super().post(request, *args, **kwargs)
+        except Exception as e:
+            logger.error(f'Form creation error: {str(e)}', exc_info=True)
+            print(f'[ERROR] Form creation failed: {str(e)}')
+            import traceback
+            traceback.print_exc()
+            
+            return Response(
+                {'error': str(e), 'details': 'لطفاً اطلاعات فرم را بررسی کنید.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
 
 class CustomFormListView(generics.ListAPIView):
@@ -702,42 +733,50 @@ class CustomFormDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 
 class ActiveCustomFormsView(views.APIView):
-    """دریافت فرم‌های فعال کارگروه کاربر"""
+    """دریافت فرم‌های فعال - برای همه کاربران (global)"""
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
         from django.utils import timezone
+        import logging
+        logger = logging.getLogger(__name__)
         
-        # کاربر باید عضو کارگروهی باشد
-        if not request.user.workgroup:
+        try:
+            # ✅ حذف filter workgroup - فرم‌ها برای همه کاربران در دسترس هستند
+            now = timezone.now()
+            active_forms = CustomForm.objects.filter(
+                is_active=True
+            ).filter(
+                # expiration_date یا None است یا بزرگ‌تر از الان
+                models.Q(expiration_date__isnull=True) | models.Q(expiration_date__gt=now)
+            ).prefetch_related('responses').order_by('-created_at')
+            
+            logger.info(f'User {request.user.id} fetching active forms. Found {active_forms.count()} forms.')
+            
+            # ✅ اضافه کردن تعداد پاسخ‌ها و وضعیت پاسخ کاربر
+            form_list = []
+            for form in active_forms:
+                form_data = {
+                    'id': form.id,
+                    'title': form.title,
+                    'description': form.description,
+                    'fields_schema': form.fields_schema,
+                    'expiration_date': form.expiration_date,
+                    'response_count': form.responses.count(),
+                    'user_submitted': form.responses.filter(user=request.user).exists(),
+                    'is_global': form.workgroup is None,  # ✅ نشان بده که آیا فرم همگانی است
+                    'workgroup_name': form.workgroup.name if form.workgroup else 'همگانی'
+                }
+                form_list.append(form_data)
+            
+            return Response(form_list, status=status.HTTP_200_OK)
+        
+        except Exception as e:
+            logger.error(f'Error fetching active forms: {str(e)}', exc_info=True)
             return Response(
-                {'error': 'کاربر عضو کارگروهی نیست.'},
-                status=status.HTTP_400_BAD_REQUEST
+                {'error': f'خطا در دریافت فرم‌های فعال: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-        
-        # ✅ فیلتر بهتر: فقط فرم‌های فعال، منقضی‌نشده، و برای کارگروه کاربر
-        now = timezone.now()
-        active_forms = CustomForm.objects.filter(
-            workgroup=request.user.workgroup,
-            is_active=True,
-            expiration_date__gt=now
-        ).prefetch_related('responses')
-        
-        # ✅ اضافه کردن تعداد پاسخ‌ها و وضعیت پاسخ کاربر
-        form_list = []
-        for form in active_forms:
-            form_data = {
-                'id': form.id,
-                'title': form.title,
-                'description': form.description,
-                'fields_schema': form.fields_schema,
-                'expiration_date': form.expiration_date,
-                'response_count': form.responses.count(),  # تعداد پاسخ‌ها
-                'user_submitted': form.responses.filter(user=request.user).exists(),  # آیا کاربر پاسخ داده است
-            }
-            form_list.append(form_data)
-        
-        return Response(form_list, status=status.HTTP_200_OK)
 
 
 class CustomFormResponseCreateView(views.APIView):
@@ -880,7 +919,7 @@ class CustomFormExportExcelView(views.APIView):
 
 
 class SkillsExportExcelView(views.APIView):
-    """صادرات آمار مهارت‌های اعضاء کارگروه به فایل Excel - فقط برای مسئول آموزش (کد 27118)"""
+    """✅ صادرات آمار مهارت‌های تمام اعضا (همگانی) به فایل Excel - فقط برای مسئول آموزش (کد 27118)"""
     permission_classes = [IsAuthenticated]
     
     TRAINING_MANAGER_CODE = '27118'  # کد گروهی مسئول آموزش
@@ -892,7 +931,6 @@ class SkillsExportExcelView(views.APIView):
         
         try:
             # دریافت پارامترهای query
-            workgroup_id = request.query_params.get('workgroup_id')
             period = request.query_params.get('period', 'thursday')  # پیش‌فرض: دوره پنج‌شنبه
             reference_date_str = request.query_params.get('reference_date')  # اختیاری
 
@@ -906,28 +944,11 @@ class SkillsExportExcelView(views.APIView):
                 )
 
             # اعتبارسنجی پارامترها
-            if not workgroup_id:
-                logger.warning('Missing workgroup_id parameter')
-                return Response(
-                    {'error': 'workgroup_id الزامی است.'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-
             if period not in ['sunday', 'thursday']:
                 logger.warning(f'Invalid period: {period}')
                 return Response(
                     {'error': 'period باید "sunday" یا "thursday" باشد.'},
                     status=status.HTTP_400_BAD_REQUEST
-                )
-
-            # دریافت کارگروه
-            try:
-                workgroup = Workgroup.objects.get(id=workgroup_id)
-            except Workgroup.DoesNotExist:
-                logger.warning(f'Workgroup not found: {workgroup_id}')
-                return Response(
-                    {'error': 'کارگروه پیدا نشد.'},
-                    status=status.HTTP_404_NOT_FOUND
                 )
 
             # تبدیل تاریخ مرجع
@@ -942,12 +963,11 @@ class SkillsExportExcelView(views.APIView):
                         status=status.HTTP_400_BAD_REQUEST
                     )
 
-            # فراخوانی تابع صادرات
-            logger.info(f'Exporting skills for workgroup {workgroup_id}, period {period}')
+            # ✅ فراخوانی تابع صادرات - workgroup=None (همه اعضا)
+            logger.info(f'Exporting skills for ALL members, period {period}')
             try:
-                from .export_utils import export_skills_to_excel
-                file_content, filename = export_skills_to_excel(
-                    workgroup=workgroup,
+                from .export_utils import export_skills_to_excel_global
+                file_content, filename = export_skills_to_excel_global(
                     period=period,
                     reference_date=reference_date
                 )
@@ -958,13 +978,13 @@ class SkillsExportExcelView(views.APIView):
                     content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
                 )
                 response['Content-Disposition'] = f'attachment; filename="{filename}"'
-                logger.info(f'Successfully exported skills file: {filename}')
+                logger.info(f'Successfully exported skills file for all members: {filename}')
                 return response
                 
             except Exception as e:
                 # ✅ مفصل logging برای خطاهای صادرات
-                logger.error(f'Error in export_skills_to_excel: {str(e)}', exc_info=True)
-                print(f'[ERROR] export_skills_to_excel failed: {str(e)}')
+                logger.error(f'Error in export_skills_to_excel_global: {str(e)}', exc_info=True)
+                print(f'[ERROR] export_skills_to_excel_global failed: {str(e)}')
                 import traceback
                 traceback.print_exc()
                 
