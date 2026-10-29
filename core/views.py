@@ -18,13 +18,15 @@ from .models import (
     User, Ring, Workgroup, WorkgroupMeeting,
     Resolution, AnnouncementAndNotification,
     WorkgroupFeedback, PersonalGrowthRecord,
-    GrowthCustomItem, PublicArchive
+    GrowthCustomItem, PublicArchive,
+    CustomForm, CustomFormResponse
 )
 from .serializers import (
     PublicArchiveSerializer, PersonalGrowthRecordSerializer,
     GrowthCustomItemSerializer, WorkgroupMeetingSerializer,
     ResolutionSerializer, WorkgroupFeedbackSerializer,
-    AnnouncementAndNotificationSerializer
+    AnnouncementAndNotificationSerializer,
+    CustomFormSerializer, CustomFormResponseSerializer
 )
 from .services import get_user_sheet_info
 from django.db.models import Q
@@ -637,3 +639,332 @@ class ManagerDashboardView(views.APIView):
             return Response({'status': 'امتیاز حلقه ذخیره شد'})
 
         return Response({'error': 'هدف نامعتبر'}, status=status.HTTP_400_BAD_REQUEST)
+
+
+
+class CustomFormCreateView(generics.CreateAPIView):
+    """سازنده فرم‌های سفارشی - فقط برای مسئولین کارگروه"""
+    permission_classes = [IsAuthenticated]
+    serializer_class = CustomFormSerializer
+
+    def perform_create(self, serializer):
+        # تأیید اینکه کاربر مسئول کارگروه است
+        if not self.request.user.is_workgroup_leader:
+            raise PermissionError('فقط مسئول کارگروه می‌تواند فرم سفارشی ایجاد کند.')
+        
+        # اگر کاربر مسئول کارگروه است، کارگروه‌اش را استخراج کن
+        workgroup = None
+        if hasattr(self.request.user, 'led_workgroup') and self.request.user.led_workgroup:
+            workgroup = self.request.user.led_workgroup
+        
+        if not workgroup:
+            raise ValueError('مسئول کارگروه باید کارگروه‌ای را رهبری کند.')
+        
+        serializer.save(creator=self.request.user, workgroup=workgroup)
+
+
+class CustomFormListView(generics.ListAPIView):
+    """لیست‌کردن فرم‌های سفارشی برای مسئول کارگروه"""
+    permission_classes = [IsAuthenticated]
+    serializer_class = CustomFormSerializer
+
+    def get_queryset(self):
+        # مسئول کارگروه می‌تواند فقط فرم‌های کارگروه خود را ببیند
+        if self.request.user.is_workgroup_leader and hasattr(self.request.user, 'led_workgroup'):
+            return CustomForm.objects.filter(workgroup=self.request.user.led_workgroup)
+        return CustomForm.objects.none()
+
+
+class CustomFormDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """جزئیات و ویرایش فرم سفارشی"""
+    permission_classes = [IsAuthenticated]
+    serializer_class = CustomFormSerializer
+    queryset = CustomForm.objects.all()
+
+    def get_object(self):
+        obj = super().get_object()
+        # تأیید اینکه صرفاً سازنده می‌تواند فرم را ویرایش/حذف کند
+        if obj.creator != self.request.user:
+            raise PermissionError('فقط سازنده فرم می‌تواند آن را ویرایش کند.')
+        return obj
+
+
+class ActiveCustomFormsView(views.APIView):
+    """دریافت فرم‌های فعال کارگروه کاربر"""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from django.utils import timezone
+        
+        # کاربر باید عضو کارگروهی باشد
+        if not request.user.workgroup:
+            return Response(
+                {'error': 'کاربر عضو کارگروهی نیست.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # ✅ فیلتر بهتر: فقط فرم‌های فعال، منقضی‌نشده، و برای کارگروه کاربر
+        now = timezone.now()
+        active_forms = CustomForm.objects.filter(
+            workgroup=request.user.workgroup,
+            is_active=True,
+            expiration_date__gt=now
+        ).prefetch_related('responses')
+        
+        # ✅ اضافه کردن تعداد پاسخ‌ها و وضعیت پاسخ کاربر
+        form_list = []
+        for form in active_forms:
+            form_data = {
+                'id': form.id,
+                'title': form.title,
+                'description': form.description,
+                'fields_schema': form.fields_schema,
+                'expiration_date': form.expiration_date,
+                'response_count': form.responses.count(),  # تعداد پاسخ‌ها
+                'user_submitted': form.responses.filter(user=request.user).exists(),  # آیا کاربر پاسخ داده است
+            }
+            form_list.append(form_data)
+        
+        return Response(form_list, status=status.HTTP_200_OK)
+
+
+class CustomFormResponseCreateView(views.APIView):
+    """ارسال پاسخ به فرم سفارشی"""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, form_id):
+        try:
+            form = CustomForm.objects.get(id=form_id)
+        except CustomForm.DoesNotExist:
+            return Response(
+                {'error': 'فرم پیدا نشد.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # تأیید اینکه فرم هنوز فعال است
+        if form.is_expired():
+            return Response(
+                {'error': 'این فرم منقضی شده است.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # تأیید اینکه کاربر عضو کارگروه فرم است
+        if request.user.workgroup != form.workgroup:
+            return Response(
+                {'error': 'این فرم برای کارگروه شما نیست.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # دریافت یا آپدیت پاسخ موجود
+        response_obj, created = CustomFormResponse.objects.update_or_create(
+            form=form,
+            user=request.user,
+            defaults={'answers': request.data.get('answers', {})}
+        )
+        
+        serializer = CustomFormResponseSerializer(response_obj)
+        status_code = status.HTTP_201_CREATED if created else status.HTTP_200_OK
+        return Response(serializer.data, status=status_code)
+
+
+class CustomFormResponsesListView(generics.ListAPIView):
+    """لیست‌کردن پاسخ‌های فرم برای مسئول کارگروه"""
+    permission_classes = [IsAuthenticated]
+    serializer_class = CustomFormResponseSerializer
+
+    def get_queryset(self):
+        form_id = self.kwargs.get('form_id')
+        try:
+            form = CustomForm.objects.get(id=form_id)
+        except CustomForm.DoesNotExist:
+            return CustomFormResponse.objects.none()
+        
+        # تأیید اینکه کاربر سازنده فرم است
+        if form.creator != self.request.user:
+            return CustomFormResponse.objects.none()
+        
+        return CustomFormResponse.objects.filter(form=form)
+
+
+class CustomFormExportExcelView(views.APIView):
+    """صادرات پاسخ‌های فرم به فایل Excel - با فیلتر بازه زمانی"""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, form_id):
+        from django.utils import timezone
+        from datetime import timedelta
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        try:
+            form = CustomForm.objects.get(id=form_id)
+        except CustomForm.DoesNotExist:
+            logger.warning(f'Form not found: {form_id}')
+            return Response(
+                {'error': 'فرم پیدا نشد.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # تأیید اینکه کاربر سازنده فرم است
+        if form.creator != request.user:
+            logger.warning(f'Unauthorized export attempt: user {request.user.id} for form {form_id}')
+            return Response(
+                {'error': 'دسترسی غیرمجاز.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # ✅ دریافت بازه زمانی از query params
+        days_back = request.query_params.get('days', 7)  # پیش‌فرض: ۷ روز
+        try:
+            days_back = int(days_back)
+            if days_back < 1 or days_back > 365:
+                days_back = 7
+        except (ValueError, TypeError):
+            days_back = 7
+        
+        # محاسبه تاریخ شروع
+        now = timezone.now()
+        start_date = now - timedelta(days=days_back)
+        
+        # ✅ فیلتر پاسخ‌ها بر اساس بازه زمانی
+        responses = CustomFormResponse.objects.filter(
+            form=form,
+            submitted_at__gte=start_date
+        ).order_by('-submitted_at')
+        
+        if responses.count() == 0:
+            logger.info(f'No responses found for form {form_id} in last {days_back} days')
+            return Response(
+                {'error': f'هیچ پاسخی برای این فرم در {days_back} روز اخیر ثبت نشده است.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # فراخوانی تابع صادرات
+        try:
+            from .export_utils import export_form_responses_to_excel_with_date_range
+            file_content, filename = export_form_responses_to_excel_with_date_range(form, responses, days_back)
+            
+            response = Response(
+                file_content,
+                content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            )
+            response['Content-Disposition'] = f'attachment; filename="{filename}"'
+            logger.info(f'Successfully exported responses for form {form_id}: {filename}')
+            return response
+        
+        except Exception as e:
+            logger.error(f'Error exporting form responses: {str(e)}', exc_info=True)
+            print(f'[ERROR] export_form_responses_to_excel_with_date_range failed: {str(e)}')
+            import traceback
+            traceback.print_exc()
+            
+            return Response(
+                {'error': f'خطا در صادرات: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+
+class SkillsExportExcelView(views.APIView):
+    """صادرات آمار مهارت‌های اعضاء کارگروه به فایل Excel - فقط برای مسئول آموزش (کد 27118)"""
+    permission_classes = [IsAuthenticated]
+    
+    TRAINING_MANAGER_CODE = '27118'  # کد گروهی مسئول آموزش
+
+    def get(self, request):
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        try:
+            # دریافت پارامترهای query
+            workgroup_id = request.query_params.get('workgroup_id')
+            period = request.query_params.get('period', 'thursday')  # پیش‌فرض: دوره پنج‌شنبه
+            reference_date_str = request.query_params.get('reference_date')  # اختیاری
+
+            # ✅ بررسی دسترسی: فقط مسئول آموزش (کد 27118) می‌تواند دسترسی داشته باشد
+            user = request.user
+            if user.group_code != self.TRAINING_MANAGER_CODE:
+                logger.warning(f'Unauthorized access attempt: user {user.id} with group_code {user.group_code}')
+                return Response(
+                    {'error': 'دسترسی غیرمجاز. این قابلیت فقط برای مسئول آموزش است.'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+
+            # اعتبارسنجی پارامترها
+            if not workgroup_id:
+                logger.warning('Missing workgroup_id parameter')
+                return Response(
+                    {'error': 'workgroup_id الزامی است.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            if period not in ['sunday', 'thursday']:
+                logger.warning(f'Invalid period: {period}')
+                return Response(
+                    {'error': 'period باید "sunday" یا "thursday" باشد.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # دریافت کارگروه
+            try:
+                workgroup = Workgroup.objects.get(id=workgroup_id)
+            except Workgroup.DoesNotExist:
+                logger.warning(f'Workgroup not found: {workgroup_id}')
+                return Response(
+                    {'error': 'کارگروه پیدا نشد.'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
+            # تبدیل تاریخ مرجع
+            reference_date = None
+            if reference_date_str:
+                try:
+                    reference_date = datetime.strptime(reference_date_str, '%Y-%m-%d')
+                except ValueError:
+                    logger.warning(f'Invalid reference_date format: {reference_date_str}')
+                    return Response(
+                        {'error': 'فرمت reference_date باید YYYY-MM-DD باشد.'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
+            # فراخوانی تابع صادرات
+            logger.info(f'Exporting skills for workgroup {workgroup_id}, period {period}')
+            try:
+                from .export_utils import export_skills_to_excel
+                file_content, filename = export_skills_to_excel(
+                    workgroup=workgroup,
+                    period=period,
+                    reference_date=reference_date
+                )
+
+                response = Response(
+                    file_content,
+                    content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                )
+                response['Content-Disposition'] = f'attachment; filename="{filename}"'
+                logger.info(f'Successfully exported skills file: {filename}')
+                return response
+                
+            except Exception as e:
+                # ✅ مفصل logging برای خطاهای صادرات
+                logger.error(f'Error in export_skills_to_excel: {str(e)}', exc_info=True)
+                print(f'[ERROR] export_skills_to_excel failed: {str(e)}')
+                import traceback
+                traceback.print_exc()
+                
+                return Response(
+                    {'error': f'خطا در صادرات Excel: {str(e)}'},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
+        
+        except Exception as e:
+            # ✅ ضیافت خطاهای غیرمنتظره
+            logger.error(f'Unexpected error in SkillsExportExcelView: {str(e)}', exc_info=True)
+            print(f'[ERROR] Unexpected error in SkillsExportExcelView: {str(e)}')
+            import traceback
+            traceback.print_exc()
+            
+            return Response(
+                {'error': 'خطا غیرمنتظره در سرور'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )

@@ -7,6 +7,7 @@ import { ProfilePage } from './pages/ProfilePage';
 import { WorkgroupPage } from "./pages/WorkgroupPage";
 import { ResolutionOfficerPage } from "./pages/ResolutionOfficerPage";
 import { ManagerPage } from "./pages/ManagerPage";
+import { FormManagerPage } from "./pages/FormManagerPage";
 import { ProtectedRoute } from './components/ProtectedRoute';
 
 function HomeGate() {
@@ -35,6 +36,7 @@ function App() {
         <Route path="/workgroup" element={<ProtectedRoute><WorkgroupPage /></ProtectedRoute>} />
         <Route path="/resolution-officer" element={<ProtectedRoute><ResolutionOfficerPage /></ProtectedRoute>} />
         <Route path="/manager" element={<ProtectedRoute><ManagerPage /></ProtectedRoute>} />
+        <Route path="/form-manager" element={<ProtectedRoute><FormManagerPage /></ProtectedRoute>} />
 
         <Route path="/" element={<HomeGate />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />

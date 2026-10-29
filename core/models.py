@@ -212,3 +212,106 @@ class PublicArchive(models.Model):
         ordering = ['-created_at']
         verbose_name = "آرشیو عمومی"
         verbose_name_plural = "آرشیو‌های عمومی"
+
+
+class CustomForm(models.Model):
+    """فرم‌های سفارشی قابل تنظیم توسط مسئولین کارگروه برای جمع‌آوری پاسخ‌های اعضاء"""
+    EXPORT_INTERVAL_CHOICES = (
+        (3, '۳ روز'),
+        (5, '۵ روز'),
+        (7, '۷ روز'),
+    )
+    
+    creator = models.ForeignKey(
+        User, 
+        on_delete=models.CASCADE, 
+        related_name='created_forms',
+        verbose_name="سازنده فرم",
+        limit_choices_to={'is_workgroup_leader': True}
+    )
+    workgroup = models.ForeignKey(
+        Workgroup,
+        on_delete=models.CASCADE,
+        related_name='custom_forms',
+        verbose_name="کارگروه"
+    )
+    title = models.CharField(max_length=255, verbose_name="عنوان فرم")
+    description = models.TextField(blank=True, null=True, verbose_name="توضیحات")
+    
+    # Export configuration
+    export_interval_days = models.IntegerField(
+        choices=EXPORT_INTERVAL_CHOICES,
+        default=7,
+        verbose_name="دوره تجمیع داده‌ها (روز)"
+    )
+    
+    # Expiration settings
+    expiration_date = models.DateTimeField(verbose_name="تاریخ انقضای فرم")
+    
+    # Dynamic fields schema as JSON
+    fields_schema = models.JSONField(
+        default=list,
+        verbose_name="طرح فیلدهای فرم",
+        help_text="لیستی از فیلدهای فرم که شامل type, label, required, order و ... است"
+    )
+    
+    # Status management
+    is_active = models.BooleanField(default=True, verbose_name="فعال بودن")
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="تاریخ ایجاد")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="تاریخ به‌روزرسانی")
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = "فرم سفارشی"
+        verbose_name_plural = "فرم‌های سفارشی"
+
+    def __str__(self):
+        return f"{self.title} - {self.workgroup.name}"
+
+    def is_expired(self):
+        """بررسی اینکه آیا فرم منقضی شده است"""
+        from django.utils import timezone
+        return timezone.now() > self.expiration_date
+
+    def save(self, *args, **kwargs):
+        """به‌روزرسانی خودکار وضعیت is_active بر اساس expiration_date"""
+        from django.utils import timezone
+        self.is_active = timezone.now() <= self.expiration_date
+        super().save(*args, **kwargs)
+
+
+class CustomFormResponse(models.Model):
+    """پاسخ‌های کاربران به فرم‌های سفارشی"""
+    form = models.ForeignKey(
+        CustomForm,
+        on_delete=models.CASCADE,
+        related_name='responses',
+        verbose_name="فرم"
+    )
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='form_responses',
+        verbose_name="کاربر"
+    )
+    
+    # JSON field to store dynamic answers mapped to field names
+    answers = models.JSONField(
+        default=dict,
+        verbose_name="پاسخ‌های کاربر",
+        help_text="فیلدهای پاسخ‌ها با کلیدهای منطبق بر schema"
+    )
+    
+    # Timestamp
+    submitted_at = models.DateTimeField(auto_now_add=True, verbose_name="تاریخ ارسال")
+
+    class Meta:
+        ordering = ['-submitted_at']
+        verbose_name = "پاسخ فرم سفارشی"
+        verbose_name_plural = "پاسخ‌های فرم‌های سفارشی"
+        unique_together = [('form', 'user')]
+
+    def __str__(self):
+        return f"پاسخ {self.user.full_name} به فرم {self.form.title}"

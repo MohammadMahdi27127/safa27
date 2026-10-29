@@ -4,7 +4,8 @@ from .models import (
     User, Ring, Workgroup, WorkgroupMeeting,
     Resolution, AnnouncementAndNotification,
     WorkgroupFeedback, PersonalGrowthRecord,
-    GrowthCustomItem, PublicArchive
+    GrowthCustomItem, PublicArchive,
+    CustomForm, CustomFormResponse
 )
 
 
@@ -118,3 +119,48 @@ class AnnouncementAndNotificationSerializer(serializers.ModelSerializer):
     class Meta:
         model = AnnouncementAndNotification
         fields = '__all__'
+
+
+class CustomFormSerializer(serializers.ModelSerializer):
+    """سریالایزر برای فرم‌های سفارشی"""
+    creator_name = serializers.CharField(source='creator.full_name', read_only=True)
+    workgroup_name = serializers.CharField(source='workgroup.name', read_only=True)
+    is_expired = serializers.SerializerMethodField()
+    responses_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CustomForm
+        fields = [
+            'id', 'creator', 'creator_name', 'workgroup', 'workgroup_name',
+            'title', 'description', 'export_interval_days', 'expiration_date',
+            'fields_schema', 'is_active', 'is_expired', 'responses_count',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'is_active', 'created_at', 'updated_at']
+
+    def get_is_expired(self, obj):
+        return obj.is_expired()
+
+    def get_responses_count(self, obj):
+        return obj.responses.count()
+
+
+class CustomFormResponseSerializer(serializers.ModelSerializer):
+    """سریالایزر برای پاسخ‌های فرم‌های سفارشی"""
+    user_name = serializers.CharField(source='user.full_name', read_only=True)
+    user_group_code = serializers.CharField(source='user.group_code', read_only=True)
+    form_title = serializers.CharField(source='form.title', read_only=True)
+
+    class Meta:
+        model = CustomFormResponse
+        fields = [
+            'id', 'form', 'form_title', 'user', 'user_name',
+            'user_group_code', 'answers', 'submitted_at'
+        ]
+        read_only_fields = ['id', 'submitted_at']
+
+    def validate_answers(self, value):
+        """اطمینان از اینکه answers یک دیکشنری معتبر است"""
+        if not isinstance(value, dict):
+            raise serializers.ValidationError("پاسخ‌ها باید به صورت فیلدهای key-value باشند.")
+        return value

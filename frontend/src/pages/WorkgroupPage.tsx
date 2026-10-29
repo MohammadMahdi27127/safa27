@@ -6,6 +6,8 @@ import {
   X, Send, FileText
 } from 'lucide-react';
 import API from '../api';
+import { SkillsAssessmentCard } from '../components/SkillsAssessmentCard';
+import { CustomFormBuilderCard } from '../components/CustomFormBuilderCard';
 
 interface Resolution {
   id: number;
@@ -409,6 +411,22 @@ export const WorkgroupPage: React.FC = () => {
             ثبت نظر و پیشنهاد
           </button>
         </div>
+
+        {/* ۶. کارت ارزیابی مهارت‌ها (برای مسئول کارگروه) */}
+        {data?.workgroup_id && (
+          <SkillsAssessmentCard
+            workgroupId={data.workgroup_id}
+            workgroupName={data.workgroup_name}
+          />
+        )}
+
+        {/* ۷. کارت سازنده فرم سفارشی (برای مسئول کارگروه) */}
+        {data?.workgroup_id && (
+          <CustomFormBuilderCard
+            workgroupId={data.workgroup_id}
+            workgroupName={data.workgroup_name}
+          />
+        )}
       </div>
 
       {/* مودال ثبت جلسه جدید */}

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowRight, Plus, Dumbbell, BookOpen, CheckCircle, Award, Sparkles, X } from 'lucide-react';
 import API from '../api';
+import { DynamicFormRenderer } from '../components/DynamicFormRenderer';
 
 export const GrowthPage: React.FC = () => {
     const navigate = useNavigate();
@@ -469,6 +470,9 @@ export const GrowthPage: React.FC = () => {
                     </div>
                 </div>
             )}
+
+            {/* فرم‌های سفارشی - DynamicFormRenderer */}
+            <DynamicFormRenderer onFormSubmitted={fetchGrowthInitialData} />
         </div>
     );
 };
