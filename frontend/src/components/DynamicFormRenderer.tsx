@@ -19,6 +19,7 @@ interface CustomFormData {
   fields_schema: FormField[];
   expiration_date: string;
   is_expired: boolean;
+  has_submitted?: boolean;
 }
 
 interface DynamicFormRendererProps {
@@ -43,18 +44,25 @@ export const DynamicFormRenderer: React.FC<DynamicFormRendererProps> = ({ onForm
       const response = await API.get('custom-forms/active/');
       
       if (response.data) {
-        // ✅ Handle both single form object and array (for backward compatibility)
-        const activeForm = Array.isArray(response.data) && response.data.length > 0 
-          ? response.data[0] 
-          : response.data;
+        // ✅ Handle single form object response (new implementation)
+        // or array for backward compatibility
+        let activeForm = response.data;
         
-        // Check if we have a valid form object
-        if (activeForm && activeForm.id) {
+        // If array response, get first element
+        if (Array.isArray(activeForm) && activeForm.length > 0) {
+          activeForm = activeForm[0];
+        }
+        
+        // Check if we have a valid form object with an id
+        if (activeForm && typeof activeForm === 'object' && activeForm.id) {
           setForm(activeForm);
           
           // اگر کاربر قبلاً پاسخ داده بود، آن را دریافت کن
-          fetchExistingResponse(activeForm.id);
+          if (!activeForm.has_submitted) {
+            fetchExistingResponse(activeForm.id);
+          }
         } else {
+          // No active form available
           setForm(null);
         }
       } else {
@@ -191,6 +199,36 @@ export const DynamicFormRenderer: React.FC<DynamicFormRendererProps> = ({ onForm
       }}>
         <AlertCircle style={{ width: '20px', height: '20px' }} />
         <span>هیچ فرم فعالی برای تکمیل وجود ندارد.</span>
+      </div>
+    );
+  }
+
+  // ✅ اگر کاربر قبلاً پاسخ داده است
+  if (form.has_submitted) {
+    return (
+      <div style={{
+        backgroundColor: 'rgba(23, 14, 46, 0.85)',
+        backdropFilter: 'blur(16px)',
+        border: '1.5px solid rgba(34, 197, 94, 0.4)',
+        borderRadius: '1.75rem',
+        padding: '1.5rem',
+        boxShadow: '0 0 30px rgba(34, 197, 94, 0.25)',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: '0.75rem',
+        color: '#86efac'
+      }}>
+        <CheckCircle style={{ width: '24px', height: '24px' }} />
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: '1rem', fontWeight: 800, marginBottom: '0.3rem' }}>
+            {form.title}
+          </div>
+          <div style={{ fontSize: '0.9rem' }}>
+            ✅ پاسخ شما با موفقیت ثبت شده است
+          </div>
+        </div>
       </div>
     );
   }

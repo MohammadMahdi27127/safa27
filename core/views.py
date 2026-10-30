@@ -742,39 +742,49 @@ class ActiveCustomFormsView(views.APIView):
         logger = logging.getLogger(__name__)
         
         try:
-            # ✅ حذف filter workgroup - فرم‌ها برای همه کاربران در دسترس هستند
-            now = timezone.now()
-            active_forms = CustomForm.objects.filter(
+            # ✅ ساده‌سازی کوئری - فقط یک فرم فعال
+            today = timezone.now().date()
+            
+            # جستجو برای فرم‌های فعال که منقضی نشده‌اند
+            active_form = CustomForm.objects.filter(
                 is_active=True
             ).filter(
-                # expiration_date یا None است یا بزرگ‌تر از الان
-                models.Q(expiration_date__isnull=True) | models.Q(expiration_date__gt=now)
-            ).prefetch_related('responses').order_by('-created_at')
+                models.Q(expiration_date__isnull=True) | models.Q(expiration_date__gte=today)
+            ).order_by('-created_at').first()
             
-            logger.info(f'User {request.user.id} fetching active forms. Found {active_forms.count()} forms.')
+            logger.info(f'User {request.user.id} fetching active form. Found: {active_form is not None}')
             
-            # ✅ اضافه کردن تعداد پاسخ‌ها و وضعیت پاسخ کاربر
-            form_list = []
-            for form in active_forms:
+            if active_form:
+                # بررسی اینکه کاربر قبلاً پاسخ داده است
+                has_submitted = active_form.responses.filter(user=request.user).exists()
+                
+                # ساخت دیتا برای بازگشت
                 form_data = {
-                    'id': form.id,
-                    'title': form.title,
-                    'description': form.description,
-                    'fields_schema': form.fields_schema,
-                    'expiration_date': form.expiration_date,
-                    'response_count': form.responses.count(),
-                    'user_submitted': form.responses.filter(user=request.user).exists(),
-                    'is_global': form.workgroup is None,  # ✅ نشان بده که آیا فرم همگانی است
-                    'workgroup_name': form.workgroup.name if form.workgroup else 'همگانی'
+                    'id': active_form.id,
+                    'title': active_form.title,
+                    'description': active_form.description,
+                    'fields_schema': active_form.fields_schema,
+                    'expiration_date': active_form.expiration_date,
+                    'is_expired': active_form.is_expired(),
+                    'has_submitted': has_submitted,  # ✅ اضافه شد
+                    'response_count': active_form.responses.count(),
+                    'is_global': active_form.workgroup is None,
+                    'workgroup_name': active_form.workgroup.name if active_form.workgroup else 'همگانی'
                 }
-                form_list.append(form_data)
-            
-            return Response(form_list, status=status.HTTP_200_OK)
+                logger.info(f'Active form found: {active_form.title}, user_submitted: {has_submitted}')
+                return Response(form_data, status=status.HTTP_200_OK)
+            else:
+                # اگر فرم فعالی وجود ندارد
+                logger.info('No active form found')
+                return Response(
+                    {'active_form': None},
+                    status=status.HTTP_200_OK
+                )
         
         except Exception as e:
-            logger.error(f'Error fetching active forms: {str(e)}', exc_info=True)
+            logger.error(f'Error fetching active form: {str(e)}', exc_info=True)
             return Response(
-                {'error': f'خطا در دریافت فرم‌های فعال: {str(e)}'},
+                {'error': f'خطا در دریافت فرم: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
@@ -799,8 +809,9 @@ class CustomFormResponseCreateView(views.APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # تأیید اینکه کاربر عضو کارگروه فرم است
-        if request.user.workgroup != form.workgroup:
+        # ✅ تأیید فرم - اگر فرم محدود به کارگروه است، کاربر باید عضو آن کارگروه باشد
+        # اما اگر فرم همگانی است (workgroup=None)، همه می‌توانند پاسخ دهند
+        if form.workgroup and request.user.workgroup != form.workgroup:
             return Response(
                 {'error': 'این فرم برای کارگروه شما نیست.'},
                 status=status.HTTP_403_FORBIDDEN
