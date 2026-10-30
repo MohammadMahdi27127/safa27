@@ -42,14 +42,20 @@ export const DynamicFormRenderer: React.FC<DynamicFormRendererProps> = ({ onForm
       setLoading(true);
       const response = await API.get('custom-forms/active/');
       
-      if (response.data && response.data.length > 0) {
-        // دریافت اولین فرم فعال
-        const activeForm = response.data[0];
-        setForm(activeForm);
+      if (response.data) {
+        // ✅ Handle both single form object and array (for backward compatibility)
+        const activeForm = Array.isArray(response.data) && response.data.length > 0 
+          ? response.data[0] 
+          : response.data;
         
-        // اگر کاربر قبلاً پاسخ داده بود، آن را دریافت کن
-        if (activeForm.id) {
+        // Check if we have a valid form object
+        if (activeForm && activeForm.id) {
+          setForm(activeForm);
+          
+          // اگر کاربر قبلاً پاسخ داده بود، آن را دریافت کن
           fetchExistingResponse(activeForm.id);
+        } else {
+          setForm(null);
         }
       } else {
         setForm(null);

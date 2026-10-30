@@ -10,7 +10,7 @@ from .views import (
     CustomFormCreateView, CustomFormListView, CustomFormDetailView,
     ActiveCustomFormsView, CustomFormResponseCreateView,
     CustomFormResponsesListView, CustomFormExportExcelView,
-    SkillsExportExcelView
+    SkillsExportExcelView, SportsExportExcelView, IslamicStudiesExportExcelView
 )
 
 urlpatterns = [
@@ -31,6 +31,8 @@ urlpatterns = [
     path('workgroup/meeting/', CreateMeetingView.as_view(), name='create-meeting'),
     path('workgroup/feedback/', WorkgroupFeedbackCreateView.as_view(), name='workgroup-feedback'),
     path('workgroup/training/export-skills-excel/', SkillsExportExcelView.as_view(), name='skills-export-excel'),
+    path('workgroup/sports/export-exercise-excel/', SportsExportExcelView.as_view(), name='sports-export-excel'),
+    path('workgroup/islamic/export-reading-excel/', IslamicStudiesExportExcelView.as_view(), name='islamic-studies-export-excel'),
 
     path('resolution-officer/', ResolutionOfficerDashboardView.as_view(), name='resolution-officer'),
     path('manager/', ManagerDashboardView.as_view(), name='manager-dashboard'),

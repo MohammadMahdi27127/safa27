@@ -8,6 +8,8 @@ import {
 import API from '../api';
 import { SkillsAssessmentCard } from '../components/SkillsAssessmentCard';
 import { CustomFormBuilderCard } from '../components/CustomFormBuilderCard';
+import { SportsExportCard } from '../components/SportsExportCard';
+import { IslamicStudiesExportCard } from '../components/IslamicStudiesExportCard';
 
 interface Resolution {
   id: number;
@@ -38,9 +40,16 @@ interface WorkgroupData {
   members_count: number;
 }
 
+interface UserInfo {
+  id: number;
+  full_name: string;
+  group_code: string;
+}
+
 export const WorkgroupPage: React.FC = () => {
   const navigate = useNavigate();
   const [data, setData] = useState<WorkgroupData | null>(null);
+  const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
 
@@ -67,6 +76,14 @@ export const WorkgroupPage: React.FC = () => {
       setData(res.data);
       if (res.data?.today_shamsi) {
         setMeetingDate(res.data.today_shamsi);
+      }
+
+      // دریافت اطلاعات کاربر فعلی
+      try {
+        const profileRes = await API.get('profile/');
+        setUserInfo(profileRes.data);
+      } catch (err) {
+        console.error('Error fetching user profile:', err);
       }
     } catch (err: any) {
       console.error('Workgroup Fetch Error:', err);
@@ -426,6 +443,16 @@ export const WorkgroupPage: React.FC = () => {
             workgroupId={data.workgroup_id}
             workgroupName={data.workgroup_name}
           />
+        )}
+
+        {/* ۸. کارت صادرات ورزش (برای سرپرست ورزش - کد 27114) */}
+        {userInfo?.group_code === '27114' && (
+          <SportsExportCard />
+        )}
+
+        {/* ۹. کارت صادرات مطالعات اسلامی (برای سرپرست مطالعات اسلامی - کد 27214) */}
+        {userInfo?.group_code === '27214' && (
+          <IslamicStudiesExportCard />
         )}
       </div>
 

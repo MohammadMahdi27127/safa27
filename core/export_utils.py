@@ -597,3 +597,338 @@ def export_skills_to_excel_global(period: str, reference_date=None) -> tuple:
     filename = f"Skills_GLOBAL_AllMembers_{period_text}_{timestamp}.xlsx"
 
     return output.getvalue(), filename
+
+
+
+def export_sports_to_excel(period: str, reference_date=None) -> tuple:
+    """
+    ✅ صادرات ساعت‌های ورزش تمام اعضا (همگانی) به فایل Excel برای یک دوره خاص.
+    
+    فقط برای سرپرست ورزش (کد 27114)
+    
+    Args:
+        period: 'sunday' یا 'thursday'
+        reference_date: تاریخ مرجع (پیش‌فرض: امروز)
+    
+    Returns:
+        tuple: (bytes محتوا، نام فایل)
+    """
+    from django.utils import timezone
+    from .date_utils import get_period_dates, get_period_label
+    from .models import PersonalGrowthRecord, User
+    import jdatetime
+
+    # محاسبه تاریخ‌های دوره
+    start_datetime, end_datetime, shamsi_start, shamsi_end = get_period_dates(
+        period=period,
+        reference_date=reference_date
+    )
+
+    # ✅ دریافت تمام کاربران (بدون محدودیت کارگروه)
+    members = User.objects.all().order_by('full_name')
+
+    # ایجاد Workbook
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'صادرات ورزش'
+
+    # تنظیم جهت RTL
+    ws.sheet_view.rightToLeft = True
+
+    # استایل‌های سرتیتر
+    header_font = Font(bold=True, color='FFFFFF', size=12)
+    header_fill = PatternFill(start_color='1F4E78', end_color='1F4E78', fill_type='solid')
+    header_alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+    right_alignment = Alignment(horizontal='right', vertical='center', wrap_text=True)
+    border = Border(
+        left=Side(style='thin'),
+        right=Side(style='thin'),
+        top=Side(style='thin'),
+        bottom=Side(style='thin')
+    )
+
+    # عنوان فایل
+    ws.merge_cells('A1:D1')
+    title_cell = ws['A1']
+    title_cell.value = "✅ صادرات ساعت‌های ورزش (تمام اعضا)"
+    title_cell.font = Font(bold=True, size=14, color='FFFFFF')
+    title_cell.fill = PatternFill(start_color='203864', end_color='203864', fill_type='solid')
+    title_cell.alignment = Alignment(horizontal='right')
+
+    # اطلاعات دوره
+    ws.merge_cells('A2:D2')
+    info_cell = ws['A2']
+    period_label = get_period_label(period)
+    info_cell.value = f"دوره: {period_label} | از {shamsi_start} تا {shamsi_end} | تمام اعضا"
+    info_cell.font = Font(size=10, italic=True)
+    info_cell.alignment = Alignment(horizontal='right')
+
+    ws.append([])  # سطر خالی
+
+    # سرتیتر‌های ستون‌ها
+    headers = [
+        'نام کامل',           # Member Full Name
+        'کد گروهی',           # Group Code
+        'روز و تاریخ ثبت',    # Submission Date
+        'ساعت ورزش'            # Exercise Hours
+    ]
+
+    ws.append(headers)
+
+    # استایل سرتیتر
+    for cell in ws[4]:
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = header_alignment
+        cell.border = border
+
+    # پر کردن داده‌های اعضاء
+    row_num = 5
+    for member in members:
+        try:
+            # دریافت رکوردهای رشد فردی در این دوره
+            records = PersonalGrowthRecord.objects.filter(
+                user=member,
+                created_at__gte=start_datetime,
+                created_at__lte=end_datetime
+            ).order_by('-created_at')
+
+            # اگر کاربر رکوردی دارد، شامل کردن آن‌ها؛ در غیر این صورت خط خالی
+            if records.exists():
+                for record in records:
+                    try:
+                        shamsi_date = record.created_at.strftime('%Y/%m/%d')
+                        # ✅ استخراج ساعت‌های ورزش ثبت‌شده
+                        exercise_hours = record.exercise_hours or 0.0
+
+                        row_data = [
+                            member.full_name or 'نام نامشخص',
+                            member.group_code or '---',
+                            shamsi_date,
+                            str(exercise_hours)
+                        ]
+
+                        ws.append(row_data)
+
+                        # استایل سطرها
+                        for cell in ws[row_num]:
+                            cell.alignment = right_alignment
+                            cell.border = border
+
+                        row_num += 1
+                    except Exception as record_err:
+                        print(f'[WARNING] Error processing record {record.id}: {str(record_err)}')
+                        continue
+            else:
+                # افزودن خط خالی برای اعضاء بدون ثبت
+                try:
+                    row_data = [
+                        member.full_name or 'نام نامشخص',
+                        member.group_code or '---',
+                        '',
+                        ''
+                    ]
+
+                    ws.append(row_data)
+
+                    # استایل سطرها
+                    for cell in ws[row_num]:
+                        cell.alignment = right_alignment
+                        cell.border = border
+
+                    row_num += 1
+                except Exception as e:
+                    print(f'[WARNING] Error adding empty row for member {member.id}: {str(e)}')
+                    continue
+        except Exception as member_err:
+            print(f'[WARNING] Error processing member {member.id}: {str(member_err)}')
+            continue
+
+    # تنظیم عرض ستون‌ها
+    column_widths = [20, 15, 20, 15]
+    for idx, width in enumerate(column_widths, 1):
+        col_letter = chr(64 + idx)
+        ws.column_dimensions[col_letter].width = width
+
+    # خط خلاصه در انتهای فایل
+    ws.append([])
+    ws.append([f'✅ جمع کل اعضا: {members.count()}'])
+
+    # ذخیره در حافظه
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    # نام فایل
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    period_text = 'Sunday_3days' if period == 'sunday' else 'Thursday_4days'
+    filename = f"Sports_AllMembers_{period_text}_{timestamp}.xlsx"
+
+    return output.getvalue(), filename
+
+
+def export_islamic_studies_to_excel(period: str, reference_date=None) -> tuple:
+    """
+    ✅ صادرات صفحات مطالعه تمام اعضا (همگانی) به فایل Excel برای یک دوره خاص.
+    
+    فقط برای سرپرست مطالعات اسلامی (کد 27214)
+    
+    Args:
+        period: 'sunday' یا 'thursday'
+        reference_date: تاریخ مرجع (پیش‌فرض: امروز)
+    
+    Returns:
+        tuple: (bytes محتوا، نام فایل)
+    """
+    from django.utils import timezone
+    from .date_utils import get_period_dates, get_period_label
+    from .models import PersonalGrowthRecord, User
+    import jdatetime
+
+    # محاسبه تاریخ‌های دوره
+    start_datetime, end_datetime, shamsi_start, shamsi_end = get_period_dates(
+        period=period,
+        reference_date=reference_date
+    )
+
+    # ✅ دریافت تمام کاربران (بدون محدودیت کارگروه)
+    members = User.objects.all().order_by('full_name')
+
+    # ایجاد Workbook
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'صادرات مطالعه'
+
+    # تنظیم جهت RTL
+    ws.sheet_view.rightToLeft = True
+
+    # استایل‌های سرتیتر
+    header_font = Font(bold=True, color='FFFFFF', size=12)
+    header_fill = PatternFill(start_color='1F4E78', end_color='1F4E78', fill_type='solid')
+    header_alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+    right_alignment = Alignment(horizontal='right', vertical='center', wrap_text=True)
+    border = Border(
+        left=Side(style='thin'),
+        right=Side(style='thin'),
+        top=Side(style='thin'),
+        bottom=Side(style='thin')
+    )
+
+    # عنوان فایل
+    ws.merge_cells('A1:D1')
+    title_cell = ws['A1']
+    title_cell.value = "✅ صادرات صفحات مطالعه (تمام اعضا)"
+    title_cell.font = Font(bold=True, size=14, color='FFFFFF')
+    title_cell.fill = PatternFill(start_color='203864', end_color='203864', fill_type='solid')
+    title_cell.alignment = Alignment(horizontal='right')
+
+    # اطلاعات دوره
+    ws.merge_cells('A2:D2')
+    info_cell = ws['A2']
+    period_label = get_period_label(period)
+    info_cell.value = f"دوره: {period_label} | از {shamsi_start} تا {shamsi_end} | تمام اعضا"
+    info_cell.font = Font(size=10, italic=True)
+    info_cell.alignment = Alignment(horizontal='right')
+
+    ws.append([])  # سطر خالی
+
+    # سرتیتر‌های ستون‌ها
+    headers = [
+        'نام کامل',           # Member Full Name
+        'کد گروهی',           # Group Code
+        'روز و تاریخ ثبت',    # Submission Date
+        'صفحات مطالعه'         # Reading Pages
+    ]
+
+    ws.append(headers)
+
+    # استایل سرتیتر
+    for cell in ws[4]:
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = header_alignment
+        cell.border = border
+
+    # پر کردن داده‌های اعضاء
+    row_num = 5
+    for member in members:
+        try:
+            # دریافت رکوردهای رشد فردی در این دوره
+            records = PersonalGrowthRecord.objects.filter(
+                user=member,
+                created_at__gte=start_datetime,
+                created_at__lte=end_datetime
+            ).order_by('-created_at')
+
+            # اگر کاربر رکوردی دارد، شامل کردن آن‌ها؛ در غیر این صورت خط خالی
+            if records.exists():
+                for record in records:
+                    try:
+                        shamsi_date = record.created_at.strftime('%Y/%m/%d')
+                        # ✅ استخراج صفحات مطالعه ثبت‌شده
+                        reading_pages = record.reading_pages or 0
+
+                        row_data = [
+                            member.full_name or 'نام نامشخص',
+                            member.group_code or '---',
+                            shamsi_date,
+                            str(reading_pages)
+                        ]
+
+                        ws.append(row_data)
+
+                        # استایل سطرها
+                        for cell in ws[row_num]:
+                            cell.alignment = right_alignment
+                            cell.border = border
+
+                        row_num += 1
+                    except Exception as record_err:
+                        print(f'[WARNING] Error processing record {record.id}: {str(record_err)}')
+                        continue
+            else:
+                # افزودن خط خالی برای اعضاء بدون ثبت
+                try:
+                    row_data = [
+                        member.full_name or 'نام نامشخص',
+                        member.group_code or '---',
+                        '',
+                        ''
+                    ]
+
+                    ws.append(row_data)
+
+                    # استایل سطرها
+                    for cell in ws[row_num]:
+                        cell.alignment = right_alignment
+                        cell.border = border
+
+                    row_num += 1
+                except Exception as e:
+                    print(f'[WARNING] Error adding empty row for member {member.id}: {str(e)}')
+                    continue
+        except Exception as member_err:
+            print(f'[WARNING] Error processing member {member.id}: {str(member_err)}')
+            continue
+
+    # تنظیم عرض ستون‌ها
+    column_widths = [20, 15, 20, 15]
+    for idx, width in enumerate(column_widths, 1):
+        col_letter = chr(64 + idx)
+        ws.column_dimensions[col_letter].width = width
+
+    # خط خلاصه در انتهای فایل
+    ws.append([])
+    ws.append([f'✅ جمع کل اعضا: {members.count()}'])
+
+    # ذخیره در حافظه
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    # نام فایل
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    period_text = 'Sunday_3days' if period == 'sunday' else 'Thursday_4days'
+    filename = f"IslamicStudies_AllMembers_{period_text}_{timestamp}.xlsx"
+
+    return output.getvalue(), filename

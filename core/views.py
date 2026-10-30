@@ -1004,3 +1004,179 @@ class SkillsExportExcelView(views.APIView):
                 {'error': 'خطا غیرمنتظره در سرور'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+
+class SportsExportExcelView(views.APIView):
+    """✅ صادرات ساعت‌های ورزش تمام اعضا (همگانی) به فایل Excel - فقط برای سرپرست ورزش (کد 27114)"""
+    permission_classes = [IsAuthenticated]
+    
+    SPORTS_LEADER_CODE = '27114'  # کد گروهی سرپرست ورزش
+
+    def get(self, request):
+        from django.http import HttpResponse
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        try:
+            # دریافت پارامترهای query
+            period = request.query_params.get('period', 'thursday')  # پیش‌فرض: دوره پنج‌شنبه
+            reference_date_str = request.query_params.get('reference_date')  # اختیاری
+
+            # ✅ بررسی دسترسی: فقط سرپرست ورزش (کد 27114) می‌تواند دسترسی داشته باشد
+            user = request.user
+            if user.group_code != self.SPORTS_LEADER_CODE:
+                logger.warning(f'Unauthorized access attempt: user {user.id} with group_code {user.group_code}')
+                return Response(
+                    {'error': 'دسترسی غیرمجاز. این قابلیت فقط برای سرپرست ورزش است.'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+
+            # اعتبارسنجی پارامترها
+            if period not in ['sunday', 'thursday']:
+                logger.warning(f'Invalid period: {period}')
+                return Response(
+                    {'error': 'period باید "sunday" یا "thursday" باشد.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # تبدیل تاریخ مرجع
+            reference_date = None
+            if reference_date_str:
+                try:
+                    reference_date = datetime.strptime(reference_date_str, '%Y-%m-%d')
+                except ValueError:
+                    logger.warning(f'Invalid reference_date format: {reference_date_str}')
+                    return Response(
+                        {'error': 'فرمت reference_date باید YYYY-MM-DD باشد.'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
+            # ✅ فراخوانی تابع صادرات - تمام اعضا
+            logger.info(f'Exporting sports for ALL members, period {period}')
+            try:
+                from .export_utils import export_sports_to_excel
+                file_content, filename = export_sports_to_excel(
+                    period=period,
+                    reference_date=reference_date
+                )
+
+                # ✅ بازگشت HttpResponse مستقیم به جای Response
+                response = HttpResponse(
+                    file_content,
+                    content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                )
+                response['Content-Disposition'] = f'attachment; filename="{filename}"'
+                logger.info(f'Successfully exported sports file for all members: {filename}')
+                return response
+                
+            except Exception as e:
+                # ✅ مفصل logging برای خطاهای صادرات
+                logger.error(f'Error in export_sports_to_excel: {str(e)}', exc_info=True)
+                print(f'[ERROR] export_sports_to_excel failed: {str(e)}')
+                import traceback
+                traceback.print_exc()
+                
+                return Response(
+                    {'error': f'خطا در صادرات Excel: {str(e)}'},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
+        
+        except Exception as e:
+            # ✅ ضیافت خطاهای غیرمنتظره
+            logger.error(f'Unexpected error in SportsExportExcelView: {str(e)}', exc_info=True)
+            print(f'[ERROR] Unexpected error in SportsExportExcelView: {str(e)}')
+            import traceback
+            traceback.print_exc()
+            
+            return Response(
+                {'error': 'خطا غیرمنتظره در سرور'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class IslamicStudiesExportExcelView(views.APIView):
+    """✅ صادرات صفحات مطالعه تمام اعضا (همگانی) به فایل Excel - فقط برای سرپرست مطالعات اسلامی (کد 27214)"""
+    permission_classes = [IsAuthenticated]
+    
+    ISLAMIC_STUDIES_LEADER_CODE = '27214'  # کد گروهی سرپرست مطالعات اسلامی
+
+    def get(self, request):
+        from django.http import HttpResponse
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        try:
+            # دریافت پارامترهای query
+            period = request.query_params.get('period', 'thursday')  # پیش‌فرض: دوره پنج‌شنبه
+            reference_date_str = request.query_params.get('reference_date')  # اختیاری
+
+            # ✅ بررسی دسترسی: فقط سرپرست مطالعات اسلامی (کد 27214) می‌تواند دسترسی داشته باشد
+            user = request.user
+            if user.group_code != self.ISLAMIC_STUDIES_LEADER_CODE:
+                logger.warning(f'Unauthorized access attempt: user {user.id} with group_code {user.group_code}')
+                return Response(
+                    {'error': 'دسترسی غیرمجاز. این قابلیت فقط برای سرپرست مطالعات اسلامی است.'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+
+            # اعتبارسنجی پارامترها
+            if period not in ['sunday', 'thursday']:
+                logger.warning(f'Invalid period: {period}')
+                return Response(
+                    {'error': 'period باید "sunday" یا "thursday" باشد.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # تبدیل تاریخ مرجع
+            reference_date = None
+            if reference_date_str:
+                try:
+                    reference_date = datetime.strptime(reference_date_str, '%Y-%m-%d')
+                except ValueError:
+                    logger.warning(f'Invalid reference_date format: {reference_date_str}')
+                    return Response(
+                        {'error': 'فرمت reference_date باید YYYY-MM-DD باشد.'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
+            # ✅ فراخوانی تابع صادرات - تمام اعضا
+            logger.info(f'Exporting islamic studies for ALL members, period {period}')
+            try:
+                from .export_utils import export_islamic_studies_to_excel
+                file_content, filename = export_islamic_studies_to_excel(
+                    period=period,
+                    reference_date=reference_date
+                )
+
+                # ✅ بازگشت HttpResponse مستقیم به جای Response
+                response = HttpResponse(
+                    file_content,
+                    content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                )
+                response['Content-Disposition'] = f'attachment; filename="{filename}"'
+                logger.info(f'Successfully exported islamic studies file for all members: {filename}')
+                return response
+                
+            except Exception as e:
+                # ✅ مفصل logging برای خطاهای صادرات
+                logger.error(f'Error in export_islamic_studies_to_excel: {str(e)}', exc_info=True)
+                print(f'[ERROR] export_islamic_studies_to_excel failed: {str(e)}')
+                import traceback
+                traceback.print_exc()
+                
+                return Response(
+                    {'error': f'خطا در صادرات Excel: {str(e)}'},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
+        
+        except Exception as e:
+            # ✅ ضیافت خطاهای غیرمنتظره
+            logger.error(f'Unexpected error in IslamicStudiesExportExcelView: {str(e)}', exc_info=True)
+            print(f'[ERROR] Unexpected error in IslamicStudiesExportExcelView: {str(e)}')
+            import traceback
+            traceback.print_exc()
+            
+            return Response(
+                {'error': 'خطا غیرمنتظره در سرور'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
