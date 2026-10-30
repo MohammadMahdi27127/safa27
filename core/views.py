@@ -1,4 +1,4 @@
-from datetime import timedelta
+﻿from datetime import timedelta
 from django.utils import timezone
 from rest_framework import views, status, generics
 from rest_framework.response import Response
@@ -29,6 +29,8 @@ from .serializers import (
     CustomFormSerializer, CustomFormResponseSerializer
 )
 from .services import get_user_sheet_info
+
+from django.db import models
 from django.db.models import Q
 
 IMAGE_EXTENSIONS = ('.png', '.jpg', '.jpeg', '.webp', '.gif')
@@ -1209,3 +1211,4 @@ class IslamicStudiesExportExcelView(views.APIView):
                 {'error': 'خطا غیرمنتظره در سرور'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
