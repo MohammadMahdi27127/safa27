@@ -209,7 +209,10 @@ export const DashboardPage: React.FC = () => {
               <img
                 src={mediaUrl(data?.avatar) || ''}
                 alt={data?.full_name || 'پروفایل'}
-                onError={() => setHeaderAvatarFailed(true)}
+                onError={(e) => {
+                  setHeaderAvatarFailed(true);
+                  (e.target as HTMLImageElement).src = '/default-avatar.svg';
+                }}
                 style={{ width: '100%', height: '100%', objectFit: 'cover' }}
               />
             ) : (
@@ -500,7 +503,10 @@ export const DashboardPage: React.FC = () => {
                         <img
                           src={mediaUrl(member.avatar) || ''}
                           alt={member.full_name}
-                          onError={() => setFailedAvatars((prev) => prev.includes(member.id) ? prev : [...prev, member.id])}
+                          onError={(e) => {
+                            setFailedAvatars((prev) => prev.includes(member.id) ? prev : [...prev, member.id]);
+                            (e.target as HTMLImageElement).src = '/default-avatar.svg';
+                          }}
                           style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                         />
                       ) : (

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <defs>
+    <style>
+      .avatar-bg { fill: #e0e7ff; }
+      .avatar-user { fill: #6366f1; }
+    </style>
+  </defs>
+  <rect class="avatar-bg" width="200" height="200" rx="100"/>
+  <circle class="avatar-user" cx="100" cy="70" r="35"/>
+  <path class="avatar-user" d="M 50 150 Q 50 120 100 120 Q 150 120 150 150 L 150 200 L 50 200 Z"/>
+</svg>

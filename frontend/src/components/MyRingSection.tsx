@@ -57,6 +57,9 @@ export const MyRingSection: React.FC<MyRingSectionProps> = ({
                     src={member.avatar}
                     alt={member.full_name}
                     className="w-12 h-12 rounded-xl object-cover border border-cyan-500/30 group-hover:border-cyan-400"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = '/default-avatar.svg';
+                    }}
                   />
                 ) : (
                   <div className="w-12 h-12 rounded-xl bg-slate-700/60 border border-slate-600 flex items-center justify-center text-cyan-400 font-bold text-base">

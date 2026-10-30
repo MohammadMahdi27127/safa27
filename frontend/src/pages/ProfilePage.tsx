@@ -239,7 +239,14 @@ export const ProfilePage: React.FC = () => {
                             boxShadow: '0 0 28px rgba(56, 189, 248, 0.55), 0 0 50px rgba(168, 85, 247, 0.3), inset 0 0 18px rgba(56, 189, 248, 0.15)',
                         }}>
                             {profile?.avatar ? (
-                                <img src={mediaUrl(profile.avatar) || ''} alt="پروفایل" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                <img 
+                                    src={mediaUrl(profile.avatar) || ''} 
+                                    alt="پروفایل" 
+                                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                    onError={(e) => {
+                                        (e.target as HTMLImageElement).src = '/default-avatar.svg';
+                                    }}
+                                />
                             ) : (
                                 <UserIcon style={{ width: '56px', height: '56px', color: '#c084fc', filter: 'drop-shadow(0 0 6px rgba(168, 85, 247, 0.8))' }} />
                             )}

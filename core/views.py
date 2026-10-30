@@ -814,9 +814,13 @@ class CustomFormResponseCreateView(views.APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, form_id):
+        import logging
+        logger = logging.getLogger(__name__)
+        
         try:
             form = CustomForm.objects.get(id=form_id)
         except CustomForm.DoesNotExist:
+            logger.warning(f'Form not found: {form_id}')
             return Response(
                 {'error': 'فرم پیدا نشد.'},
                 status=status.HTTP_404_NOT_FOUND
@@ -824,29 +828,41 @@ class CustomFormResponseCreateView(views.APIView):
         
         # تأیید اینکه فرم هنوز فعال است
         if form.is_expired():
+            logger.warning(f'Form expired: {form_id}')
             return Response(
                 {'error': 'این فرم منقضی شده است.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
         # ✅ تأیید فرم - اگر فرم محدود به کارگروه است، کاربر باید عضو آن کارگروه باشد
-        # اما اگر فرم همگانی است (workgroup=None)، همه می‌توانند پاسخ دهند
+        logger.info(f'[CustomFormResponseCreateView] User {request.user.id} submitting to form {form_id}')
+        logger.info(f'[CustomFormResponseCreateView] Form workgroup: {form.workgroup}, User workgroup: {request.user.workgroup}')
+        
         if form.workgroup and request.user.workgroup != form.workgroup:
+            logger.error(f'[CustomFormResponseCreateView] 403: Workgroup mismatch - user {request.user.id} not in form workgroup')
             return Response(
                 {'error': 'این فرم برای کارگروه شما نیست.'},
                 status=status.HTTP_403_FORBIDDEN
             )
         
         # دریافت یا آپدیت پاسخ موجود
-        response_obj, created = CustomFormResponse.objects.update_or_create(
-            form=form,
-            user=request.user,
-            defaults={'answers': request.data.get('answers', {})}
-        )
-        
-        serializer = CustomFormResponseSerializer(response_obj)
-        status_code = status.HTTP_201_CREATED if created else status.HTTP_200_OK
-        return Response(serializer.data, status=status_code)
+        try:
+            response_obj, created = CustomFormResponse.objects.update_or_create(
+                form=form,
+                user=request.user,
+                defaults={'answers': request.data.get('answers', {})}
+            )
+            
+            serializer = CustomFormResponseSerializer(response_obj)
+            status_code = status.HTTP_201_CREATED if created else status.HTTP_200_OK
+            logger.info(f'[CustomFormResponseCreateView] Response saved successfully - created: {created}')
+            return Response(serializer.data, status=status_code)
+        except Exception as e:
+            logger.error(f'[CustomFormResponseCreateView] Error saving response: {str(e)}', exc_info=True)
+            return Response(
+                {'error': f'خطا در ذخیره پاسخ: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 
 class CustomFormResponsesListView(generics.ListAPIView):
