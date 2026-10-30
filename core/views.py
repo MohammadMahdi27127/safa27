@@ -739,11 +739,13 @@ class ActiveCustomFormsView(views.APIView):
     def get(self, request):
         from django.utils import timezone
         import logging
+        import traceback
         logger = logging.getLogger(__name__)
         
         try:
             # ✅ ساده‌سازی کوئری - فقط یک فرم فعال
             today = timezone.now().date()
+            logger.info(f'[ActiveCustomFormsView] Step 1: User {request.user.id} fetching active form. Today: {today}')
             
             # جستجو برای فرم‌های فعال که منقضی نشده‌اند
             active_form = CustomForm.objects.filter(
@@ -752,39 +754,55 @@ class ActiveCustomFormsView(views.APIView):
                 models.Q(expiration_date__isnull=True) | models.Q(expiration_date__gte=today)
             ).order_by('-created_at').first()
             
-            logger.info(f'User {request.user.id} fetching active form. Found: {active_form is not None}')
+            logger.info(f'[ActiveCustomFormsView] Step 2: Query completed. Found form: {active_form is not None}')
             
             if active_form:
-                # بررسی اینکه کاربر قبلاً پاسخ داده است
-                has_submitted = active_form.responses.filter(user=request.user).exists()
+                logger.info(f'[ActiveCustomFormsView] Step 3: Processing form: {active_form.id} - {active_form.title}')
                 
-                # ساخت دیتا برای بازگشت
-                form_data = {
-                    'id': active_form.id,
-                    'title': active_form.title,
-                    'description': active_form.description,
-                    'fields_schema': active_form.fields_schema,
-                    'expiration_date': active_form.expiration_date,
-                    'is_expired': active_form.is_expired(),
-                    'has_submitted': has_submitted,  # ✅ اضافه شد
-                    'response_count': active_form.responses.count(),
-                    'is_global': active_form.workgroup is None,
-                    'workgroup_name': active_form.workgroup.name if active_form.workgroup else 'همگانی'
-                }
-                logger.info(f'Active form found: {active_form.title}, user_submitted: {has_submitted}')
-                return Response(form_data, status=status.HTTP_200_OK)
+                # بررسی اینکه کاربر قبلاً پاسخ داده است
+                try:
+                    has_submitted = active_form.responses.filter(user=request.user).exists()
+                    logger.info(f'[ActiveCustomFormsView] Step 4: has_submitted check completed: {has_submitted}')
+                except Exception as e:
+                    logger.error(f'[ActiveCustomFormsView] Error checking has_submitted: {str(e)}', exc_info=True)
+                    has_submitted = False
+                
+                # ساخت دیتا برای بازگشت - استفاده از safe methods
+                try:
+                    form_data = {
+                        'id': active_form.id,
+                        'title': active_form.title,
+                        'description': active_form.description or '',
+                        'fields_schema': active_form.fields_schema if isinstance(active_form.fields_schema, list) else [],
+                        'expiration_date': active_form.expiration_date.isoformat() if active_form.expiration_date else None,
+                        'is_expired': active_form.is_expired(),
+                        'has_submitted': has_submitted,
+                        'response_count': active_form.responses.count(),
+                        'is_global': active_form.workgroup is None,
+                        'workgroup_name': active_form.workgroup.name if active_form.workgroup else 'همگانی'
+                    }
+                    logger.info(f'[ActiveCustomFormsView] Step 5: Form data created successfully')
+                    return Response(form_data, status=status.HTTP_200_OK)
+                except Exception as e:
+                    logger.error(f'[ActiveCustomFormsView] Error creating form_data: {str(e)}', exc_info=True)
+                    traceback.print_exc()
+                    print(f'[DEBUG] active_form type: {type(active_form)}')
+                    print(f'[DEBUG] active_form.fields_schema type: {type(active_form.fields_schema)}')
+                    raise
             else:
                 # اگر فرم فعالی وجود ندارد
-                logger.info('No active form found')
+                logger.info('[ActiveCustomFormsView] No active form found')
                 return Response(
-                    {'active_form': None},
+                    {'active_form': None, 'has_submitted': False},
                     status=status.HTTP_200_OK
                 )
         
         except Exception as e:
-            logger.error(f'Error fetching active form: {str(e)}', exc_info=True)
+            logger.error(f'[ActiveCustomFormsView] CRITICAL ERROR: {str(e)}', exc_info=True)
+            traceback.print_exc()
+            print(f'[ERROR] Full traceback printed above')
             return Response(
-                {'error': f'خطا در دریافت فرم: {str(e)}'},
+                {'error': 'خطا در دریافت فرم', 'details': str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 

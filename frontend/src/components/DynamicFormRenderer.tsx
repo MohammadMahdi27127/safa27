@@ -41,7 +41,10 @@ export const DynamicFormRenderer: React.FC<DynamicFormRendererProps> = ({ onForm
   const fetchActiveForm = async () => {
     try {
       setLoading(true);
+      console.log('[DynamicFormRenderer] Fetching active form...');
       const response = await API.get('custom-forms/active/');
+      
+      console.log('[DynamicFormRenderer] Response received:', response.data);
       
       if (response.data) {
         // ✅ Handle single form object response (new implementation)
@@ -50,29 +53,44 @@ export const DynamicFormRenderer: React.FC<DynamicFormRendererProps> = ({ onForm
         
         // If array response, get first element
         if (Array.isArray(activeForm) && activeForm.length > 0) {
+          console.log('[DynamicFormRenderer] Array response detected, using first element');
           activeForm = activeForm[0];
         }
         
         // Check if we have a valid form object with an id
         if (activeForm && typeof activeForm === 'object' && activeForm.id) {
+          console.log('[DynamicFormRenderer] Valid form found:', activeForm.id, activeForm.title);
           setForm(activeForm);
           
           // اگر کاربر قبلاً پاسخ داده بود، آن را دریافت کن
           if (!activeForm.has_submitted) {
+            console.log('[DynamicFormRenderer] User has not submitted, fetching existing response...');
             fetchExistingResponse(activeForm.id);
+          } else {
+            console.log('[DynamicFormRenderer] User already submitted this form');
           }
         } else {
           // No active form available
+          console.log('[DynamicFormRenderer] No valid form object found');
           setForm(null);
         }
       } else {
+        console.log('[DynamicFormRenderer] Empty response data');
         setForm(null);
       }
       setMessage('');
     } catch (err: any) {
-      console.error('Error fetching active form:', err);
-      setMessage('خطا در دریافت فرم.');
-      setMessageType('error');
+      console.error('[DynamicFormRenderer] Error fetching active form:', err);
+      console.error('[DynamicFormRenderer] Error details:', {
+        status: err.response?.status,
+        statusText: err.response?.statusText,
+        data: err.response?.data,
+        message: err.message
+      });
+      // ✅ IMPORTANT: Prevent this error from breaking the page
+      setForm(null);
+      setMessage('');
+      // Don't show error to user - just silently treat as no form available
     } finally {
       setLoading(false);
     }
