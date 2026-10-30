@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowRight, Plus, Dumbbell, BookOpen, CheckCircle, Award, Sparkles, X } from 'lucide-react';
+import { useState, useEffect } from 'react';
 import API from '../api';
 import { DynamicFormRenderer } from '../components/DynamicFormRenderer';
+import { CustomFormCard } from '../components/CustomFormCard';
 
 export const GrowthPage: React.FC = () => {
     const navigate = useNavigate();
@@ -21,12 +23,30 @@ export const GrowthPage: React.FC = () => {
     const [customTitle, setCustomTitle] = useState('');
     const [customItems, setCustomItems] = useState<{ id: number; item_type: string; title: string }[]>([]);
 
+    // ✅ Active Forms State
+    const [activeForms, setActiveForms] = useState<any[]>([]);
+    const [formsLoading, setFormsLoading] = useState(false);
+
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState('');
 
     useEffect(() => {
         fetchGrowthInitialData();
+        fetchActiveForms();
     }, []);
+
+    const fetchActiveForms = async () => {
+        setFormsLoading(true);
+        try {
+            const res = await API.get('/api/custom-forms/active/');
+            setActiveForms(Array.isArray(res.data) ? res.data : []);
+        } catch (err) {
+            console.error('Error fetching active forms:', err);
+            setActiveForms([]);
+        } finally {
+            setFormsLoading(false);
+        }
+    };
 
     const fetchGrowthInitialData = async () => {
         try {
@@ -470,6 +490,41 @@ export const GrowthPage: React.FC = () => {
                     </div>
                 </div>
             )}
+
+            {/* ✅ فرم‌های سفارشی فعال - چندین کانتینر */}
+            {formsLoading ? (
+                <div style={{
+                    textAlign: 'center',
+                    padding: '2rem',
+                    color: '#cbd5e1',
+                    fontSize: '0.9rem'
+                }}>
+                    درحال بارگذاری فرم‌ها...
+                </div>
+            ) : activeForms.length > 0 ? (
+                <div style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '1.5rem'
+                }}>
+                    <h3 style={{
+                        fontSize: '1.1rem',
+                        fontWeight: 700,
+                        color: '#f0abfc',
+                        margin: 0,
+                        marginTop: '0.5rem'
+                    }}>
+                        📋 فرم‌های فعال برای تکمیل
+                    </h3>
+                    {activeForms.map((form) => (
+                        <CustomFormCard
+                            key={form.id}
+                            form={form}
+                            onSuccess={fetchActiveForms}
+                        />
+                    ))}
+                </div>
+            ) : null}
 
             {/* فرم‌های سفارشی - DynamicFormRenderer */}
             <DynamicFormRenderer onFormSubmitted={fetchGrowthInitialData} />
