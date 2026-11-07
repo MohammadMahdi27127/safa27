@@ -14,31 +14,37 @@ from .views import (
 )
 
 urlpatterns = [
+    # Authentication
     path('auth/login/', CustomLoginView.as_view(), name='login'),
     path('auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
 
+    # Profile & Dashboard
     path('dashboard/', DashboardView.as_view(), name='dashboard'),
     path('profile/', ProfileView.as_view(), name='profile'),
     path('profile/avatar/', UserAvatarUpdateView.as_view(), name='profile-avatar'),
     path('profile/change-password/', ChangePasswordView.as_view(), name='change-password'),
 
+    # Public Archive & Growth
     path('archive/', PublicArchiveView.as_view(), name='public-archive'),
     path('growth/', PersonalGrowthView.as_view(), name='personal-growth'),
     path('growth/custom-item/', GrowthCustomItemCreateView.as_view(), name='growth-custom-item'),
 
+    # Workgroups & Feedback
     path('workgroup/', WorkgroupDetailView.as_view(), name='workgroup-detail'),
     path('workgroup/resolution/<int:pk>/toggle/', ToggleResolutionView.as_view(), name='toggle-resolution'),
     path('workgroup/meeting/', CreateMeetingView.as_view(), name='create-meeting'),
     path('workgroup/feedback/', WorkgroupFeedbackCreateView.as_view(), name='workgroup-feedback'),
+    
+    # Leader Specialized Exports
     path('workgroup/training/export-skills-excel/', SkillsExportExcelView.as_view(), name='skills-export-excel'),
     path('workgroup/sports/export-exercise-excel/', SportsExportExcelView.as_view(), name='sports-export-excel'),
     path('workgroup/islamic/export-reading-excel/', IslamicStudiesExportExcelView.as_view(), name='islamic-studies-export-excel'),
 
+    # Roles & Management
     path('resolution-officer/', ResolutionOfficerDashboardView.as_view(), name='resolution-officer'),
     path('manager/', ManagerDashboardView.as_view(), name='manager-dashboard'),
-
-    path('slider-images/', SliderImagesView.as_view(), name='slider-images'),
     path('manager/send-message/', ManagerSendMessageView.as_view(), name='manager-send-message'),
+    path('slider-images/', SliderImagesView.as_view(), name='slider-images'),
     
     # Custom Form endpoints
     path('custom-forms/create/', CustomFormCreateView.as_view(), name='custom-form-create'),
@@ -47,5 +53,6 @@ urlpatterns = [
     path('custom-forms/active/', ActiveCustomFormsView.as_view(), name='active-custom-forms'),
     path('custom-forms/<int:form_id>/submit/', CustomFormResponseCreateView.as_view(), name='custom-form-response-create'),
     path('custom-forms/<int:form_id>/responses/', CustomFormResponsesListView.as_view(), name='custom-form-responses-list'),
+    path('custom-forms/<int:form_id>/export/', CustomFormExportExcelView.as_view(), name='custom-form-export'),
     path('custom-forms/<int:form_id>/export-excel/', CustomFormExportExcelView.as_view(), name='custom-form-export-excel'),
 ]
