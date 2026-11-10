@@ -1,7 +1,7 @@
 from django.urls import path
 from rest_framework_simplejwt.views import TokenRefreshView
 from .views import (
-    CustomLoginView, DashboardView, ProfileView, SliderImagesView,
+    CustomLoginView, CustomLogoutView, DashboardView, ProfileView, SliderImagesView,
     UserAvatarUpdateView, ChangePasswordView,
     PublicArchiveView, PersonalGrowthView, GrowthCustomItemCreateView,
     WorkgroupDetailView, ToggleResolutionView, CreateMeetingView,
@@ -17,6 +17,7 @@ from .views import (
 urlpatterns = [
     # Authentication
     path('auth/login/', CustomLoginView.as_view(), name='login'),
+    path('auth/logout/', CustomLogoutView.as_view(), name='logout'),
     path('auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
 
     # Profile & Dashboard
