@@ -13,12 +13,52 @@ interface RingStat {
   overall_score: number;
 }
 
+type RingMetric = 'overall_score' | 'avg_attendance' | 'avg_submissions';
+
+// ✅ Custom Tooltip with Persian labels
+const CustomTooltip: React.FC<any> = ({ active, payload, metric }: { active?: boolean; payload?: any[]; metric: RingMetric }) => {
+  if (!active || !payload?.length) return null;
+
+  const data = payload[0].payload;
+  const metricLabels: Record<RingMetric, { label: string; unit: string }> = {
+    overall_score: { label: 'امتیاز شاخص کل', unit: 'امتیاز' },
+    avg_attendance: { label: 'میانگین درصد حضور', unit: '٪' },
+    avg_submissions: { label: 'میانگین تعداد پر کردن', unit: 'مرتبه' },
+  };
+
+  const info = metricLabels[metric];
+  const value = (data[metric] as number).toFixed(1);
+
+  return (
+    <div style={{
+      backgroundColor: 'rgba(15, 10, 30, 0.95)',
+      border: '1px solid rgba(168, 85, 247, 0.5)',
+      borderRadius: '0.5rem',
+      padding: '0.75rem',
+      direction: 'rtl',
+    }}>
+      <p style={{ margin: '0.25rem 0', color: '#e2e8f0', fontSize: '0.85rem' }}>
+        <strong>حلقه {data.ring_number} - {data.name}</strong>
+      </p>
+      <p style={{ margin: '0.25rem 0', color: '#8B5CF6', fontSize: '0.8rem' }}>
+        {info.label}: <strong>{value} {info.unit}</strong>
+      </p>
+    </div>
+  );
+};
+
 export const RingsAnalyticsChart: React.FC = () => {
   const [days, setDays] = useState(7);
-  const [metric, setMetric] = useState<'overall_score' | 'avg_attendance' | 'avg_submissions'>('overall_score');
+  const [metric, setMetric] = useState<RingMetric>('overall_score');
   const [rings, setRings] = useState<RingStat[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const metricLabels: Record<RingMetric, { label: string; unit: string; color: string }> = {
+    overall_score: { label: 'امتیاز شاخص کل', unit: 'امتیاز', color: '#F59E0B' },
+    avg_attendance: { label: 'میانگین حضور', unit: '٪', color: '#8B5CF6' },
+    avg_submissions: { label: 'میانگین پر کردن', unit: 'مرتبه', color: '#EC4899' },
+  };
 
   const fetchData = async (selectedDays: number) => {
     setLoading(true);
@@ -41,30 +81,23 @@ export const RingsAnalyticsChart: React.FC = () => {
     fetchData(days);
   }, [days, metric]);
 
-  const metricLabels: Record<string, { label: string; unit: string; color: string }> = {
-    overall_score: { label: 'شاخص کل', unit: 'امتیاز', color: '#F59E0B' },
-    avg_attendance: { label: 'میانگین حضور', unit: '%', color: '#8B5CF6' },
-    avg_submissions: { label: 'میانگین پر کردن', unit: 'تعداد', color: '#EC4899' },
-  };
-
-  const timeRangeButtons = [
-    { label: '۱ هفته', value: 7 },
-    { label: '۲ هفته', value: 14 },
-    { label: '۱ ماه', value: 30 },
-  ];
-
-  const metricButtons = [
-    { label: 'شاخص کل', value: 'overall_score' as const },
-    { label: 'حضور', value: 'avg_attendance' as const },
-    { label: 'پر کردن', value: 'avg_submissions' as const },
-  ];
-
   const currentMetricInfo = metricLabels[metric];
+
+  const filterSelectStyle: React.CSSProperties = {
+    padding: '0.5rem 0.75rem',
+    borderRadius: '0.6rem',
+    border: '1px solid rgba(168, 85, 247, 0.4)',
+    backgroundColor: 'rgba(15, 10, 30, 0.8)',
+    color: '#cbd5e1',
+    fontWeight: 600,
+    cursor: 'pointer',
+    fontSize: '0.85rem',
+  };
 
   return (
     <div style={{
       backgroundColor: 'rgba(23, 14, 46, 0.72)',
-      border: '1.5px solid rgba(168, 85, 247, 0.32)',
+      border: '1.5px solid rgba(234, 179, 8, 0.32)',
       borderRadius: '1.35rem',
       padding: '1.5rem',
       boxShadow: '0 0 22px rgba(126, 34, 206, 0.16)',
@@ -77,51 +110,55 @@ export const RingsAnalyticsChart: React.FC = () => {
         <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: '#8B5CF6' }}>آمار حلقه‌ها</h3>
       </div>
 
-      {/* Time Range Buttons */}
-      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
-        <span style={{ fontSize: '0.8rem', color: '#cbd5e1', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-          <Calendar style={{ width: '16px', height: '16px' }} /> بازه:
-        </span>
-        {timeRangeButtons.map((btn) => (
-          <button
-            key={btn.value}
-            onClick={() => setDays(btn.value)}
+      {/* Filter Controls - Dropdowns */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+        gap: '1rem',
+        marginBottom: '1.5rem',
+      }}>
+        {/* Metric Dropdown */}
+        <div>
+          <label style={{ fontSize: '0.75rem', color: '#cbd5e1', fontWeight: 600, display: 'block', marginBottom: '0.3rem' }}>
+            شاخص ارزیابی
+          </label>
+          <select
+            value={metric}
+            onChange={(e) => setMetric(e.target.value as RingMetric)}
             style={{
-              padding: '0.4rem 0.8rem',
-              borderRadius: '0.6rem',
-              border: days === btn.value ? '2px solid #8B5CF6' : '1px solid rgba(168, 85, 247, 0.3)',
-              background: days === btn.value ? 'rgba(139, 92, 246, 0.1)' : 'rgba(15, 10, 30, 0.6)',
-              color: days === btn.value ? '#8B5CF6' : '#cbd5e1',
-              fontWeight: 600,
-              cursor: 'pointer',
-              fontSize: '0.8rem',
+              ...filterSelectStyle,
+              width: '100%',
+              borderColor: currentMetricInfo.color,
+              backgroundColor: `${currentMetricInfo.color}10`,
             }}
           >
-            {btn.label}
-          </button>
-        ))}
-      </div>
+            <option value="overall_score">امتیاز شاخص کل</option>
+            <option value="avg_attendance">میانگین حضور</option>
+            <option value="avg_submissions">میانگین پر کردن</option>
+          </select>
+        </div>
 
-      {/* Metric Toggle Buttons */}
-      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
-        {metricButtons.map((btn) => (
-          <button
-            key={btn.value}
-            onClick={() => setMetric(btn.value)}
+        {/* Time Range Dropdown */}
+        <div>
+          <label style={{ fontSize: '0.75rem', color: '#cbd5e1', fontWeight: 600, display: 'block', marginBottom: '0.3rem' }}>
+            <Calendar style={{ width: '14px', height: '14px', display: 'inline', marginLeft: '0.3rem' }} />
+            بازه زمانی
+          </label>
+          <select
+            value={days}
+            onChange={(e) => setDays(Number(e.target.value))}
             style={{
-              padding: '0.4rem 0.8rem',
-              borderRadius: '0.6rem',
-              border: metric === btn.value ? `2px solid ${metricLabels[btn.value].color}` : '1px solid rgba(168, 85, 247, 0.3)',
-              background: metric === btn.value ? `${metricLabels[btn.value].color}15` : 'rgba(15, 10, 30, 0.6)',
-              color: metric === btn.value ? metricLabels[btn.value].color : '#cbd5e1',
-              fontWeight: 600,
-              cursor: 'pointer',
-              fontSize: '0.8rem',
+              ...filterSelectStyle,
+              width: '100%',
+              borderColor: '#8B5CF6',
+              backgroundColor: 'rgba(139, 92, 246, 0.1)',
             }}
           >
-            {btn.label}
-          </button>
-        ))}
+            <option value={7}>۱ هفته گذشته</option>
+            <option value={14}>۲ هفته گذشته</option>
+            <option value={30}>۱ ماه گذشته</option>
+          </select>
+        </div>
       </div>
 
       {/* Loading / Error */}
@@ -131,56 +168,65 @@ export const RingsAnalyticsChart: React.FC = () => {
       {/* Chart */}
       {!loading && rings.length > 0 && (
         <>
-          <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={rings} margin={{ top: 20, right: 30, left: 0, bottom: 40 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(168, 85, 247, 0.1)" />
-              <XAxis
-                dataKey="name"
-                angle={-30}
-                textAnchor="end"
-                height={70}
-                tick={{ fill: '#cbd5e1', fontSize: 11 }}
-              />
-              <YAxis tick={{ fill: '#cbd5e1', fontSize: 11 }} />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: 'rgba(15, 10, 30, 0.95)',
-                  border: '1px solid rgba(168, 85, 247, 0.3)',
-                  borderRadius: '0.5rem',
-                }}
-                labelStyle={{ color: '#fff' }}
-              />
-              <Bar
-                dataKey={metric}
-                fill={currentMetricInfo.color}
-                radius={[8, 8, 0, 0]}
-                isAnimationActive={true}
-              >
-                {rings.map((_, index) => (
-                  <Cell
-                    key={`cell-${index}`}
-                    fill={index === 0 ? '#F59E0B' : currentMetricInfo.color}
-                    opacity={index === 0 ? 1 : 0.7}
-                  />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+          <div style={{
+            overflowX: 'auto',
+            marginBottom: '2rem',
+            borderRadius: '0.75rem',
+            backgroundColor: 'rgba(15, 10, 30, 0.4)',
+            padding: '1rem',
+          }}>
+            <ResponsiveContainer width={Math.max(rings.length * 50, 600)} height={280}>
+              <BarChart data={rings} margin={{ top: 20, right: 30, left: 0, bottom: 50 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(168, 85, 247, 0.1)" />
+                <XAxis
+                  dataKey="name"
+                  angle={-30}
+                  textAnchor="end"
+                  height={70}
+                  tick={{ fill: '#cbd5e1', fontSize: 11 }}
+                />
+                <YAxis tick={{ fill: '#cbd5e1', fontSize: 11 }} />
+                <Tooltip content={<CustomTooltip metric={metric} />} cursor={{ fill: 'rgba(168, 85, 247, 0.1)' }} />
+                <Bar
+                  dataKey={metric}
+                  fill={currentMetricInfo.color}
+                  radius={[6, 6, 0, 0]}
+                  isAnimationActive={true}
+                >
+                  {rings.map((_, index) => (
+                    <Cell
+                      key={`cell-${index}`}
+                      fill={index === 0 ? '#F59E0B' : currentMetricInfo.color}
+                      opacity={index === 0 ? 1 : 0.7}
+                    />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
 
           {/* Stats Table */}
-          <div style={{ marginTop: '1.5rem' }}>
+          <div>
+            <h3 style={{ margin: '0 0 1rem', fontSize: '0.95rem', fontWeight: 700, color: '#e2e8f0' }}>
+              جدول رتبه‌بندی: {currentMetricInfo.label}
+            </h3>
             <div style={{
               overflowX: 'auto',
               backgroundColor: 'rgba(15, 10, 30, 0.6)',
               borderRadius: '0.75rem',
               padding: '0.75rem',
             }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+              <table style={{
+                width: '100%',
+                borderCollapse: 'collapse',
+                fontSize: '0.85rem',
+                minWidth: '500px',
+              }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid rgba(168, 85, 247, 0.2)' }}>
-                    <th style={{ padding: '0.5rem', textAlign: 'right', color: '#cbd5e1', fontWeight: 600 }}>رتبه</th>
+                    <th style={{ padding: '0.5rem', textAlign: 'center', color: '#cbd5e1', fontWeight: 600, width: '60px' }}>رتبه</th>
                     <th style={{ padding: '0.5rem', textAlign: 'right', color: '#cbd5e1', fontWeight: 600 }}>نام حلقه</th>
-                    <th style={{ padding: '0.5rem', textAlign: 'center', color: '#cbd5e1', fontWeight: 600 }}>شماره</th>
+                    <th style={{ padding: '0.5rem', textAlign: 'center', color: '#cbd5e1', fontWeight: 600, width: '70px' }}>شماره</th>
                     <th style={{ padding: '0.5rem', textAlign: 'center', color: '#cbd5e1', fontWeight: 600 }}>اعضا</th>
                     <th style={{ padding: '0.5rem', textAlign: 'center', color: '#cbd5e1', fontWeight: 600 }}>میانگین حضور</th>
                   </tr>
@@ -191,25 +237,42 @@ export const RingsAnalyticsChart: React.FC = () => {
                       key={ring.id}
                       style={{
                         borderBottom: '1px solid rgba(168, 85, 247, 0.1)',
-                        backgroundColor: index === 0 ? 'rgba(245, 158, 11, 0.05)' : 'transparent',
+                        backgroundColor: index === 0 ? 'rgba(245, 158, 11, 0.08)' : 'transparent',
                       }}
                     >
-                      <td style={{ padding: '0.5rem', textAlign: 'center', fontSize: '1rem', fontWeight: 700 }}>
+                      <td style={{ padding: '0.75rem 0.5rem', textAlign: 'center', fontSize: '1.1rem' }}>
                         {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `${index + 1}`}
                       </td>
-                      <td style={{ padding: '0.5rem', color: '#e2e8f0' }}>{ring.name}</td>
-                      <td style={{ padding: '0.5rem', textAlign: 'center', color: '#cbd5e1' }}>
+                      <td style={{ padding: '0.75rem 0.5rem', color: '#e2e8f0', fontWeight: 500 }}>
+                        {ring.name}
+                      </td>
+                      <td style={{ padding: '0.75rem 0.5rem', textAlign: 'center', color: '#cbd5e1', fontWeight: 600 }}>
                         {ring.ring_number}
                       </td>
-                      <td style={{ padding: '0.5rem', textAlign: 'center', color: '#cbd5e1' }}>{ring.member_count}</td>
-                      <td style={{ padding: '0.5rem', textAlign: 'center', color: '#8B5CF6', fontWeight: 600 }}>
-                        {ring.avg_attendance.toFixed(1)}%
+                      <td style={{ padding: '0.75rem 0.5rem', textAlign: 'center', color: '#cbd5e1' }}>
+                        {ring.member_count}
+                      </td>
+                      <td style={{
+                        padding: '0.75rem 0.5rem',
+                        textAlign: 'center',
+                        color: currentMetricInfo.color,
+                        fontWeight: 700,
+                      }}>
+                        {ring.avg_attendance.toFixed(1)}٪
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
+          </div>
+
+          {/* Stats Summary */}
+          <div style={{ marginTop: '1.5rem', padding: '1rem', backgroundColor: 'rgba(15, 10, 30, 0.5)', borderRadius: '0.75rem' }}>
+            <p style={{ margin: '0.5rem 0', fontSize: '0.85rem', color: '#cbd5e1' }}>
+              📊 <strong>جمع کل:</strong> {rings.length} حلقه | 
+              <strong style={{ marginRight: '1rem' }}>میانگین:</strong> {(rings.reduce((sum, r) => sum + r[metric], 0) / rings.length).toFixed(1)} {currentMetricInfo.unit}
+            </p>
           </div>
         </>
       )}

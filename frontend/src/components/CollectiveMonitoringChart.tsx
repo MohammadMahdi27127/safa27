@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { TrendingUp, Calendar } from 'lucide-react';
 import API from '../api';
@@ -14,12 +14,72 @@ interface Member {
   overall_score: number;
 }
 
+type Metric = 'overall_score' | 'exercise_hours' | 'reading_pages' | 'attendance_rate' | 'growth_submissions';
+type MemberFilter = 'top10' | 'bottom10' | 'all';
+
+// ✅ Custom Tooltip with Persian labels
+const CustomTooltip: React.FC<any> = ({ active, payload, metric }: { active?: boolean; payload?: any[]; metric: Metric }) => {
+  if (!active || !payload?.length) return null;
+
+  const data = payload[0].payload;
+  const metricLabels: Record<Metric, { label: string; unit: string }> = {
+    overall_score: { label: 'امتیاز شاخص کل', unit: 'امتیاز' },
+    exercise_hours: { label: 'ساعت‌های ورزشی', unit: 'ساعت' },
+    reading_pages: { label: 'تعداد صفحه‌های مطالعه شده', unit: 'صفحه' },
+    attendance_rate: { label: 'درصد حضور', unit: '٪' },
+    growth_submissions: { label: 'تعداد ثبت در سامانه', unit: 'مرتبه' },
+  };
+
+  const info = metricLabels[metric];
+  const value = metric === 'reading_pages' || metric === 'growth_submissions' 
+    ? data[metric] 
+    : (data[metric] as number).toFixed(1);
+
+  return (
+    <div style={{
+      backgroundColor: 'rgba(15, 10, 30, 0.95)',
+      border: '1px solid rgba(168, 85, 247, 0.5)',
+      borderRadius: '0.5rem',
+      padding: '0.75rem',
+      direction: 'rtl',
+    }}>
+      <p style={{ margin: '0.25rem 0', color: '#e2e8f0', fontSize: '0.85rem' }}>
+        <strong>{data.full_name}</strong>
+      </p>
+      <p style={{ margin: '0.25rem 0', color: '#F59E0B', fontSize: '0.8rem' }}>
+        {info.label}: <strong>{value} {info.unit}</strong>
+      </p>
+    </div>
+  );
+};
+
 export const CollectiveMonitoringChart: React.FC = () => {
   const [days, setDays] = useState(7);
-  const [metric, setMetric] = useState<'overall_score' | 'exercise_hours' | 'reading_pages' | 'attendance_rate' | 'growth_submissions'>('overall_score');
+  const [metric, setMetric] = useState<Metric>('overall_score');
+  const [memberFilter, setMemberFilter] = useState<MemberFilter>('all');
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const metricLabels: Record<Metric, { label: string; unit: string; color: string }> = {
+    overall_score: { label: 'امتیاز شاخص کل', unit: 'امتیاز', color: '#F59E0B' },
+    exercise_hours: { label: 'ساعت‌های ورزشی', unit: 'ساعت', color: '#10B981' },
+    reading_pages: { label: 'صفحه‌های مطالعه شده', unit: 'صفحه', color: '#3B82F6' },
+    attendance_rate: { label: 'درصد حضور', unit: '٪', color: '#8B5CF6' },
+    growth_submissions: { label: 'تعداد ثبت در سامانه', unit: 'مرتبه', color: '#EC4899' },
+  };
+
+  // ✅ Filter members based on selection
+  const filteredMembers = useMemo(() => {
+    const sorted = [...members].sort((a, b) => b[metric] - a[metric]);
+    
+    if (memberFilter === 'top10') return sorted.slice(0, 10);
+    if (memberFilter === 'bottom10') return sorted.slice(-10).reverse();
+    return sorted;
+  }, [members, metric, memberFilter]);
+
+  // ✅ Dynamic chart width for scrollable container
+  const chartContainerWidth = Math.max(filteredMembers.length * 50, 800);
 
   const fetchData = async (selectedDays: number) => {
     setLoading(true);
@@ -27,7 +87,6 @@ export const CollectiveMonitoringChart: React.FC = () => {
     try {
       const res = await API.get(`/mentor/collective-monitoring/?days=${selectedDays}`);
       if (res.data?.members) {
-        // ✅ Sort by selected metric descending
         const sorted = [...res.data.members].sort((a, b) => b[metric] - a[metric]);
         setMembers(sorted);
       }
@@ -43,34 +102,24 @@ export const CollectiveMonitoringChart: React.FC = () => {
     fetchData(days);
   }, [days, metric]);
 
-  const metricLabels: Record<string, { label: string; unit: string; color: string }> = {
-    overall_score: { label: 'شاخص کل', unit: 'امتیاز', color: '#F59E0B' },
-    exercise_hours: { label: 'ورزش', unit: 'ساعت', color: '#10B981' },
-    reading_pages: { label: 'مطالعه', unit: 'صفحه', color: '#3B82F6' },
-    attendance_rate: { label: 'درصد حضور', unit: '%', color: '#8B5CF6' },
-    growth_submissions: { label: 'پر کردن سامانه', unit: 'تعداد', color: '#EC4899' },
-  };
-
-  const timeRangeButtons = [
-    { label: '۱ هفته', value: 7 },
-    { label: '۲ هفته', value: 14 },
-    { label: '۱ ماه', value: 30 },
-  ];
-
-  const metricButtons = [
-    { label: 'شاخص کل', value: 'overall_score' as const },
-    { label: 'ورزش', value: 'exercise_hours' as const },
-    { label: 'مطالعه', value: 'reading_pages' as const },
-    { label: 'حضور', value: 'attendance_rate' as const },
-    { label: 'سامانه', value: 'growth_submissions' as const },
-  ];
-
   const currentMetricInfo = metricLabels[metric];
+
   const getRankMedal = (index: number) => {
     if (index === 0) return '🥇';
     if (index === 1) return '🥈';
     if (index === 2) return '🥉';
     return `${index + 1}`;
+  };
+
+  const filterSelectStyle: React.CSSProperties = {
+    padding: '0.5rem 0.75rem',
+    borderRadius: '0.6rem',
+    border: '1px solid rgba(168, 85, 247, 0.4)',
+    backgroundColor: 'rgba(15, 10, 30, 0.8)',
+    color: '#cbd5e1',
+    fontWeight: 600,
+    cursor: 'pointer',
+    fontSize: '0.85rem',
   };
 
   return (
@@ -88,98 +137,126 @@ export const CollectiveMonitoringChart: React.FC = () => {
         <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 700, color: '#facc15' }}>نظارت جمعی اعضا</h2>
       </div>
 
-      {/* Time Range Buttons */}
-      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
-        <span style={{ fontSize: '0.8rem', color: '#cbd5e1', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-          <Calendar style={{ width: '16px', height: '16px' }} /> بازه زمانی:
-        </span>
-        {timeRangeButtons.map((btn) => (
-          <button
-            key={btn.value}
-            onClick={() => setDays(btn.value)}
+      {/* Filter Controls - Dropdowns */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+        gap: '1rem',
+        marginBottom: '1.5rem',
+      }}>
+        {/* Metric Dropdown */}
+        <div>
+          <label style={{ fontSize: '0.75rem', color: '#cbd5e1', fontWeight: 600, display: 'block', marginBottom: '0.3rem' }}>
+            شاخص ارزیابی
+          </label>
+          <select
+            value={metric}
+            onChange={(e) => setMetric(e.target.value as Metric)}
             style={{
-              padding: '0.4rem 0.8rem',
-              borderRadius: '0.6rem',
-              border: days === btn.value ? '2px solid #F59E0B' : '1px solid rgba(168, 85, 247, 0.3)',
-              background: days === btn.value ? 'rgba(245, 158, 11, 0.1)' : 'rgba(15, 10, 30, 0.6)',
-              color: days === btn.value ? '#F59E0B' : '#cbd5e1',
-              fontWeight: 600,
-              cursor: 'pointer',
-              fontSize: '0.8rem',
+              ...filterSelectStyle,
+              width: '100%',
+              borderColor: currentMetricInfo.color,
+              backgroundColor: `${currentMetricInfo.color}10`,
             }}
           >
-            {btn.label}
-          </button>
-        ))}
-      </div>
+            <option value="overall_score">امتیاز شاخص کل (برترین‌ها)</option>
+            <option value="exercise_hours">ساعت‌های ورزشی</option>
+            <option value="reading_pages">صفحه‌های مطالعه شده</option>
+            <option value="attendance_rate">درصد حضور</option>
+            <option value="growth_submissions">تعداد ثبت در سامانه</option>
+          </select>
+        </div>
 
-      {/* Metric Toggle Buttons */}
-      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
-        {metricButtons.map((btn) => (
-          <button
-            key={btn.value}
-            onClick={() => setMetric(btn.value)}
+        {/* Time Range Dropdown */}
+        <div>
+          <label style={{ fontSize: '0.75rem', color: '#cbd5e1', fontWeight: 600, display: 'block', marginBottom: '0.3rem' }}>
+            <Calendar style={{ width: '14px', height: '14px', display: 'inline', marginLeft: '0.3rem' }} />
+            بازه زمانی
+          </label>
+          <select
+            value={days}
+            onChange={(e) => setDays(Number(e.target.value))}
             style={{
-              padding: '0.4rem 0.8rem',
-              borderRadius: '0.6rem',
-              border: metric === btn.value ? `2px solid ${metricLabels[btn.value].color}` : '1px solid rgba(168, 85, 247, 0.3)',
-              background: metric === btn.value ? `${metricLabels[btn.value].color}15` : 'rgba(15, 10, 30, 0.6)',
-              color: metric === btn.value ? metricLabels[btn.value].color : '#cbd5e1',
-              fontWeight: 600,
-              cursor: 'pointer',
-              fontSize: '0.8rem',
+              ...filterSelectStyle,
+              width: '100%',
+              borderColor: '#F59E0B',
+              backgroundColor: 'rgba(245, 158, 11, 0.1)',
             }}
           >
-            {btn.label}
-          </button>
-        ))}
+            <option value={7}>۱ هفته گذشته</option>
+            <option value={14}>۲ هفته گذشته</option>
+            <option value={30}>۱ ماه گذشته</option>
+          </select>
+        </div>
+
+        {/* Member Filter Dropdown */}
+        <div>
+          <label style={{ fontSize: '0.75rem', color: '#cbd5e1', fontWeight: 600, display: 'block', marginBottom: '0.3rem' }}>
+            نمایش اعضا
+          </label>
+          <select
+            value={memberFilter}
+            onChange={(e) => setMemberFilter(e.target.value as MemberFilter)}
+            style={{
+              ...filterSelectStyle,
+              width: '100%',
+              borderColor: '#8B5CF6',
+              backgroundColor: 'rgba(139, 92, 246, 0.1)',
+            }}
+          >
+            <option value="top10">۱۰ نفر اول (برترین‌ها)</option>
+            <option value="bottom10">۱۰ نفر آخر (نیازمند پیگیری)</option>
+            <option value="all">همه اعضا (نمایش کامل)</option>
+          </select>
+        </div>
       </div>
 
       {/* Loading / Error */}
       {loading && <div style={{ textAlign: 'center', color: '#fde68a', padding: '1rem' }}>درحال بارگذاری...</div>}
       {error && <div style={{ textAlign: 'center', color: '#fca5a5', padding: '1rem' }}>{error}</div>}
 
-      {/* Chart */}
-      {!loading && members.length > 0 && (
+      {/* Chart - Scrollable Container for many members */}
+      {!loading && filteredMembers.length > 0 && (
         <>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={members} margin={{ top: 20, right: 30, left: 0, bottom: 60 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(168, 85, 247, 0.1)" />
-              <XAxis
-                dataKey="full_name"
-                angle={-45}
-                textAnchor="end"
-                height={80}
-                tick={{ fill: '#cbd5e1', fontSize: 11 }}
-              />
-              <YAxis tick={{ fill: '#cbd5e1', fontSize: 11 }} />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: 'rgba(15, 10, 30, 0.95)',
-                  border: '1px solid rgba(168, 85, 247, 0.3)',
-                  borderRadius: '0.5rem',
-                }}
-                labelStyle={{ color: '#fff' }}
-              />
-              <Bar
-                dataKey={metric}
-                fill={currentMetricInfo.color}
-                radius={[8, 8, 0, 0]}
-                isAnimationActive={true}
-              >
-                {members.map((_, index) => (
-                  <Cell
-                    key={`cell-${index}`}
-                    fill={index === 0 ? '#F59E0B' : currentMetricInfo.color}
-                    opacity={index === 0 ? 1 : 0.7}
-                  />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+          <div style={{
+            overflowX: 'auto',
+            marginBottom: '2rem',
+            borderRadius: '0.75rem',
+            backgroundColor: 'rgba(15, 10, 30, 0.4)',
+            padding: '1rem',
+          }}>
+            <ResponsiveContainer width={chartContainerWidth} height={320}>
+              <BarChart data={filteredMembers} margin={{ top: 20, right: 30, left: 0, bottom: 60 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(168, 85, 247, 0.1)" />
+                <XAxis
+                  dataKey="full_name"
+                  angle={-45}
+                  textAnchor="end"
+                  height={80}
+                  tick={{ fill: '#cbd5e1', fontSize: 11 }}
+                />
+                <YAxis tick={{ fill: '#cbd5e1', fontSize: 11 }} />
+                <Tooltip content={<CustomTooltip metric={metric} />} cursor={{ fill: 'rgba(168, 85, 247, 0.1)' }} />
+                <Bar
+                  dataKey={metric}
+                  fill={currentMetricInfo.color}
+                  radius={[6, 6, 0, 0]}
+                  isAnimationActive={true}
+                >
+                  {filteredMembers.map((_, index) => (
+                    <Cell
+                      key={`cell-${index}`}
+                      fill={index === 0 ? '#F59E0B' : currentMetricInfo.color}
+                      opacity={index === 0 ? 1 : 0.7}
+                    />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
 
           {/* Leaderboard Table */}
-          <div style={{ marginTop: '2rem' }}>
+          <div>
             <h3 style={{ margin: '0 0 1rem', fontSize: '0.95rem', fontWeight: 700, color: '#e2e8f0' }}>
               جدول رتبه‌بندی: {currentMetricInfo.label}
             </h3>
@@ -193,33 +270,34 @@ export const CollectiveMonitoringChart: React.FC = () => {
                 width: '100%',
                 borderCollapse: 'collapse',
                 fontSize: '0.85rem',
+                minWidth: '500px',
               }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid rgba(168, 85, 247, 0.2)' }}>
-                    <th style={{ padding: '0.5rem', textAlign: 'right', color: '#cbd5e1', fontWeight: 600 }}>رتبه</th>
+                    <th style={{ padding: '0.5rem', textAlign: 'center', color: '#cbd5e1', fontWeight: 600, width: '60px' }}>رتبه</th>
                     <th style={{ padding: '0.5rem', textAlign: 'right', color: '#cbd5e1', fontWeight: 600 }}>نام</th>
-                    <th style={{ padding: '0.5rem', textAlign: 'right', color: '#cbd5e1', fontWeight: 600 }}>کد گروهی</th>
+                    <th style={{ padding: '0.5rem', textAlign: 'center', color: '#cbd5e1', fontWeight: 600, width: '80px' }}>کد گروهی</th>
                     <th style={{ padding: '0.5rem', textAlign: 'center', color: '#cbd5e1', fontWeight: 600 }}>
                       {currentMetricInfo.label} ({currentMetricInfo.unit})
                     </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {members.map((member, index) => (
+                  {filteredMembers.map((member, index) => (
                     <tr
                       key={member.id}
                       style={{
                         borderBottom: '1px solid rgba(168, 85, 247, 0.1)',
-                        backgroundColor: index === 0 ? 'rgba(245, 158, 11, 0.05)' : 'transparent',
+                        backgroundColor: index === 0 ? 'rgba(245, 158, 11, 0.08)' : 'transparent',
                       }}
                     >
-                      <td style={{ padding: '0.75rem 0.5rem', textAlign: 'center', fontSize: '1.2rem' }}>
+                      <td style={{ padding: '0.75rem 0.5rem', textAlign: 'center', fontSize: '1.1rem' }}>
                         {getRankMedal(index)}
                       </td>
-                      <td style={{ padding: '0.75rem 0.5rem', color: '#e2e8f0' }}>
+                      <td style={{ padding: '0.75rem 0.5rem', color: '#e2e8f0', fontWeight: 500 }}>
                         {member.full_name}
                       </td>
-                      <td style={{ padding: '0.75rem 0.5rem', color: '#94a3b8' }}>
+                      <td style={{ padding: '0.75rem 0.5rem', textAlign: 'center', color: '#94a3b8', fontFamily: 'monospace' }}>
                         {member.group_code}
                       </td>
                       <td style={{
@@ -230,7 +308,7 @@ export const CollectiveMonitoringChart: React.FC = () => {
                       }}>
                         {metric === 'reading_pages' || metric === 'growth_submissions'
                           ? member[metric]
-                          : member[metric].toFixed(1)}
+                          : (member[metric] as number).toFixed(1)}
                       </td>
                     </tr>
                   ))}
@@ -238,10 +316,18 @@ export const CollectiveMonitoringChart: React.FC = () => {
               </table>
             </div>
           </div>
+
+          {/* Stats Summary */}
+          <div style={{ marginTop: '1.5rem', padding: '1rem', backgroundColor: 'rgba(15, 10, 30, 0.5)', borderRadius: '0.75rem' }}>
+            <p style={{ margin: '0.5rem 0', fontSize: '0.85rem', color: '#cbd5e1' }}>
+              📊 <strong>جمع کل:</strong> {filteredMembers.length} عضو | 
+              <strong style={{ marginRight: '1rem' }}>میانگین:</strong> {(filteredMembers.reduce((sum, m) => sum + m[metric], 0) / filteredMembers.length).toFixed(1)} {currentMetricInfo.unit}
+            </p>
+          </div>
         </>
       )}
 
-      {!loading && members.length === 0 && !error && (
+      {!loading && filteredMembers.length === 0 && !error && (
         <div style={{ textAlign: 'center', color: '#cbd5e1', padding: '2rem' }}>
           داده‌ای برای نمایش وجود ندارد
         </div>
