@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Shield, Star, Eye, EyeOff, Lock, CheckCircle2 } from 'lucide-react';
 import API from '../api';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 export const LoginPage: React.FC = () => {
   const [groupCode, setGroupCode] = useState('');
@@ -11,6 +11,10 @@ export const LoginPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
 
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  // ✅ Get redirect target from query params
+  const redirectTarget = searchParams.get('next') || '';
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,7 +33,10 @@ export const LoginPage: React.FC = () => {
         const user = response.data.user;
         localStorage.setItem('user_info', JSON.stringify(user));
 
-        if (user.is_manager) {
+        // ✅ Redirect to 'next' param if available, otherwise default
+        if (redirectTarget && redirectTarget.startsWith('/')) {
+          navigate(redirectTarget, { replace: true });
+        } else if (user.is_manager) {
           navigate('/manager', { replace: true });
         } else {
           navigate('/dashboard', { replace: true });

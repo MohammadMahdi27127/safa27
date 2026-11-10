@@ -10,7 +10,8 @@ from .views import (
     CustomFormCreateView, CustomFormListView, CustomFormDetailView,
     ActiveCustomFormsView, CustomFormResponseCreateView,
     CustomFormResponsesListView, CustomFormExportExcelView,
-    SkillsExportExcelView, SportsExportExcelView, IslamicStudiesExportExcelView
+    SkillsExportExcelView, SportsExportExcelView, IslamicStudiesExportExcelView,
+    CollectiveMonitoringView, WorkgroupsStatsView, RingsStatsView
 )
 
 urlpatterns = [
@@ -43,6 +44,10 @@ urlpatterns = [
     # Roles & Management
     path('resolution-officer/', ResolutionOfficerDashboardView.as_view(), name='resolution-officer'),
     path('manager/', ManagerDashboardView.as_view(), name='manager-dashboard'),
+
+    path('mentor/collective-monitoring/', CollectiveMonitoringView.as_view(), name='collective-monitoring'),
+    path('mentor/workgroups-stats/', WorkgroupsStatsView.as_view(), name='workgroups-stats'),
+    path('mentor/rings-stats/', RingsStatsView.as_view(), name='rings-stats'),
     path('manager/send-message/', ManagerSendMessageView.as_view(), name='manager-send-message'),
     path('slider-images/', SliderImagesView.as_view(), name='slider-images'),
     

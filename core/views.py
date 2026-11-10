@@ -1222,3 +1222,233 @@ class IslamicStudiesExportExcelView(views.APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
+
+
+
+class CollectiveMonitoringView(views.APIView):
+    """✅ نظارت جمعی - تمام اعضا با فیلتر بازه زمانی"""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not request.user.is_manager:
+            return Response({'error': 'دسترسی غیرمجاز'}, status=status.HTTP_403_FORBIDDEN)
+
+        days = int(request.query_params.get('days', 7))
+        if days not in [7, 14, 30]:
+            days = 7
+
+        now = timezone.now()
+        start_date = now - timezone.timedelta(days=days)
+
+        members_stats = []
+
+        try:
+            # تمام اعضا (غیر مربی)
+            for user in User.objects.filter(is_manager=False).order_by('full_name'):
+                try:
+                    # ورزش
+                    exercise_hours = PersonalGrowthRecord.objects.filter(
+                        user=user,
+                        created_at__gte=start_date
+                    ).aggregate(total=models.Sum('exercise_hours'))['total'] or 0
+
+                    # مطالعه
+                    reading_pages = PersonalGrowthRecord.objects.filter(
+                        user=user,
+                        created_at__gte=start_date
+                    ).aggregate(total=models.Sum('reading_pages'))['total'] or 0
+
+                    # تعداد پر کردن سامانه
+                    growth_submissions = PersonalGrowthRecord.objects.filter(
+                        user=user,
+                        created_at__gte=start_date
+                    ).count()
+
+                    # درصد حضور
+                    sheet_info = get_user_sheet_info(user.group_code)
+                    attendance_rate = float(sheet_info.get('attendance_rate', '0%').rstrip('%')) if sheet_info.get('attendance_rate') else 0
+
+                    # شاخص کل
+                    overall_score = (exercise_hours * 10) + (reading_pages * 0.5) + (attendance_rate * 1.5) + (growth_submissions * 10)
+
+                    members_stats.append({
+                        'id': user.id,
+                        'full_name': user.full_name,
+                        'group_code': user.group_code,
+                        'exercise_hours': round(exercise_hours, 2),
+                        'reading_pages': int(reading_pages),
+                        'attendance_rate': round(attendance_rate, 1),
+                        'growth_submissions': growth_submissions,
+                        'overall_score': round(overall_score, 2),
+                    })
+                except Exception as e:
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.error(f'Error calculating stats for user {user.id}: {str(e)}')
+                    continue
+
+            return Response({
+                'days': days,
+                'members': members_stats,
+                'count': len(members_stats),
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f'[CollectiveMonitoringView] Error: {str(e)}', exc_info=True)
+            return Response(
+                {'error': f'خطا در دریافت داده‌ها: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class WorkgroupsStatsView(views.APIView):
+    """✅ آمار کارگروه‌ها"""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not request.user.is_manager:
+            return Response({'error': 'دسترسی غیرمجاز'}, status=status.HTTP_403_FORBIDDEN)
+
+        days = int(request.query_params.get('days', 7))
+        if days not in [7, 14, 30]:
+            days = 7
+
+        now = timezone.now()
+        start_date = now - timezone.timedelta(days=days)
+
+        workgroups_stats = []
+
+        try:
+            for wg in Workgroup.objects.all():
+                try:
+                    # تعداد جلسات
+                    meeting_count = wg.meetings.filter(created_at__gte=start_date).count()
+
+                    # تعداد اعضا
+                    members = User.objects.filter(workgroup=wg, is_manager=False)
+                    member_count = members.count()
+
+                    # میانگین حضور اعضا
+                    attendance_rates = []
+                    for member in members:
+                        sheet_info = get_user_sheet_info(member.group_code)
+                        rate_str = sheet_info.get('attendance_rate', '0%')
+                        rate = float(rate_str.rstrip('%')) if rate_str else 0
+                        attendance_rates.append(rate)
+                    avg_attendance = sum(attendance_rates) / len(attendance_rates) if attendance_rates else 0
+
+                    # میانگین پر کردن سامانه
+                    growth_submissions = PersonalGrowthRecord.objects.filter(
+                        user__workgroup=wg,
+                        created_at__gte=start_date
+                    ).count()
+                    avg_submissions = growth_submissions / member_count if member_count > 0 else 0
+
+                    # شاخص کل
+                    overall_score = (meeting_count * 5) + (avg_attendance * 1.5) + (avg_submissions * 10)
+
+                    workgroups_stats.append({
+                        'id': wg.id,
+                        'name': wg.name,
+                        'meeting_count': meeting_count,
+                        'member_count': member_count,
+                        'avg_attendance': round(avg_attendance, 1),
+                        'avg_submissions': round(avg_submissions, 1),
+                        'overall_score': round(overall_score, 2),
+                    })
+                except Exception as e:
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.error(f'Error calculating stats for workgroup {wg.id}: {str(e)}')
+                    continue
+
+            return Response({
+                'days': days,
+                'workgroups': workgroups_stats,
+                'count': len(workgroups_stats),
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f'[WorkgroupsStatsView] Error: {str(e)}', exc_info=True)
+            return Response(
+                {'error': f'خطا در دریافت داده‌ها: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class RingsStatsView(views.APIView):
+    """✅ آمار حلقه‌ها"""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not request.user.is_manager:
+            return Response({'error': 'دسترسی غیرمجاز'}, status=status.HTTP_403_FORBIDDEN)
+
+        days = int(request.query_params.get('days', 7))
+        if days not in [7, 14, 30]:
+            days = 7
+
+        now = timezone.now()
+        start_date = now - timezone.timedelta(days=days)
+
+        rings_stats = []
+
+        try:
+            for ring in Ring.objects.all():
+                try:
+                    # اعضای حلقه
+                    members = User.objects.filter(ring=ring, is_manager=False)
+                    member_count = members.count()
+
+                    # میانگین حضور
+                    attendance_rates = []
+                    for member in members:
+                        sheet_info = get_user_sheet_info(member.group_code)
+                        rate_str = sheet_info.get('attendance_rate', '0%')
+                        rate = float(rate_str.rstrip('%')) if rate_str else 0
+                        attendance_rates.append(rate)
+                    avg_attendance = sum(attendance_rates) / len(attendance_rates) if attendance_rates else 0
+
+                    # تعداد پر کردن سامانه
+                    growth_submissions = PersonalGrowthRecord.objects.filter(
+                        user__ring=ring,
+                        created_at__gte=start_date
+                    ).count()
+                    avg_submissions = growth_submissions / member_count if member_count > 0 else 0
+
+                    # شاخص کل
+                    overall_score = (avg_attendance * 1.5) + (avg_submissions * 10)
+
+                    rings_stats.append({
+                        'id': ring.id,
+                        'name': ring.name,
+                        'ring_number': ring.ring_number,
+                        'member_count': member_count,
+                        'avg_attendance': round(avg_attendance, 1),
+                        'avg_submissions': round(avg_submissions, 1),
+                        'overall_score': round(overall_score, 2),
+                    })
+                except Exception as e:
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.error(f'Error calculating stats for ring {ring.id}: {str(e)}')
+                    continue
+
+            return Response({
+                'days': days,
+                'rings': rings_stats,
+                'count': len(rings_stats),
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f'[RingsStatsView] Error: {str(e)}', exc_info=True)
+            return Response(
+                {'error': f'خطا در دریافت داده‌ها: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )

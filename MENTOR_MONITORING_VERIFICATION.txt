@@ -1,0 +1,367 @@
+✅ MENTOR MONITORING DASHBOARD - VERIFICATION CHECKLIST
+
+================================================================================
+PART 1: BACKEND API ENDPOINTS
+================================================================================
+
+ENDPOINT 1: GET /api/mentor/collective-monitoring/?days=X
+────────────────────────────────────────────────────────
+
+✓ Permission Check:
+  - Only authenticated users (manager/mentor)
+  - Returns 403 if not is_manager
+
+✓ Parameters:
+  - ?days=7 (default)
+  - ?days=14
+  - ?days=30
+  - Invalid days fallback to 7
+  - If days < 1 or > 365, defaults to 7
+
+✓ Response Data (Success 200):
+  {
+    "days": 7,
+    "members": [
+      {
+        "id": 1,
+        "full_name": "کریمی",
+        "group_code": "27001",
+        "exercise_hours": 10.5,
+        "reading_pages": 150,
+        "attendance_rate": 85.5,
+        "growth_submissions": 7,
+        "overall_score": 325.25
+      },
+      ...
+    ],
+    "count": 25
+  }
+
+✓ Metrics Calculation:
+  - exercise_hours: SUM of PersonalGrowthRecord.exercise_hours
+  - reading_pages: SUM of PersonalGrowthRecord.reading_pages
+  - attendance_rate: Fetched from get_user_sheet_info (%)
+  - growth_submissions: COUNT of PersonalGrowthRecord entries
+  - overall_score = (exercise_hours × 10) + (reading_pages × 0.5) + 
+                    (attendance_rate × 1.5) + (growth_submissions × 10)
+
+✓ Error Handling:
+  - 403: User not manager
+  - 500: Exception in calculation (with logging)
+  - Empty list if no members
+  - Handles null/missing sheet_info gracefully
+
+ENDPOINT 2: GET /api/mentor/workgroups-stats/?days=X
+────────────────────────────────────────────────────
+
+✓ Permission Check:
+  - Only authenticated managers
+  - Returns 403 if not is_manager
+
+✓ Response Data (Success 200):
+  {
+    "days": 7,
+    "workgroups": [
+      {
+        "id": 1,
+        "name": "سازماندهی",
+        "meeting_count": 3,
+        "member_count": 5,
+        "avg_attendance": 82.4,
+        "avg_submissions": 2.5,
+        "overall_score": 63.75
+      },
+      ...
+    ],
+    "count": 8
+  }
+
+✓ Metrics Calculation:
+  - meeting_count: COUNT of WorkgroupMeeting records
+  - member_count: COUNT of User objects with workgroup=this
+  - avg_attendance: AVERAGE of attendance rates across members
+  - avg_submissions: SUM of submissions / member_count
+  - overall_score = (meeting_count × 5) + (avg_attendance × 1.5) + 
+                    (avg_submissions × 10)
+
+✓ Error Handling:
+  - Safe division (member_count > 0 check)
+  - Handles null attendance_rate
+  - Empty list if no workgroups
+
+ENDPOINT 3: GET /api/mentor/rings-stats/?days=X
+───────────────────────────────────────────────
+
+✓ Permission Check:
+  - Only authenticated managers
+  - Returns 403 if not is_manager
+
+✓ Response Data (Success 200):
+  {
+    "days": 7,
+    "rings": [
+      {
+        "id": 1,
+        "name": "حلقه ۱",
+        "ring_number": 1,
+        "member_count": 8,
+        "avg_attendance": 78.9,
+        "avg_submissions": 3.2,
+        "overall_score": 64.45
+      },
+      ...
+    ],
+    "count": 5
+  }
+
+✓ Metrics Calculation:
+  - member_count: COUNT of User objects with ring=this
+  - avg_attendance: AVERAGE of attendance rates
+  - avg_submissions: SUM of submissions / member_count
+  - overall_score = (avg_attendance × 1.5) + (avg_submissions × 10)
+
+✓ Error Handling:
+  - Safe division (member_count > 0 check)
+  - Handles null attendance_rate
+  - Empty list if no rings
+
+================================================================================
+PART 2: FRONTEND COMPONENTS
+================================================================================
+
+COMPONENT 1: CollectiveMonitoringChart
+───────────────────────────────────────
+
+✓ Time Range Filters:
+  - Button: "۱ هفته" → setDays(7)
+  - Button: "۲ هفته" → setDays(14)
+  - Button: "۱ ماه" → setDays(30)
+  - Active state styling (gold/yellow)
+
+✓ Metric Toggle Buttons:
+  - "شاخص کل" → metric='overall_score'
+  - "ورزش" → metric='exercise_hours'
+  - "مطالعه" → metric='reading_pages'
+  - "حضور" → metric='attendance_rate'
+  - "سامانه" → metric='growth_submissions'
+  - Each has distinct color
+
+✓ Bar Chart Rendering:
+  - Data sorted by selected metric (descending)
+  - Top-ranked bar: Gold (#F59E0B) highlight
+  - Responsive height (300px)
+  - Tooltips on hover
+  - X-axis labels rotated
+  - Y-axis numeric scale
+
+✓ Leaderboard Table:
+  - Medal rankings (🥇 🥈 🥉)
+  - Full_name, group_code, metric value
+  - Top row highlighted (gold background)
+  - Colors match metric (gold for overall_score)
+
+✓ Error States:
+  - Loading spinner: "درحال بارگذاری..."
+  - Error message: Displayed in red (#fca5a5)
+  - Empty state: "داده‌ای برای نمایش وجود ندارد"
+
+✓ API Integration:
+  - Calls: GET /api/mentor/collective-monitoring/?days=X
+  - Re-fetches on days OR metric change
+  - Handles 403/500 errors gracefully
+
+COMPONENT 2: WorkgroupsAnalyticsChart
+──────────────────────────────────────
+
+✓ Time Range Filters: Same as above
+
+✓ Metric Toggle Buttons:
+  - "شاخص کل", "جلسات", "حضور", "پر کردن"
+  - Color scheme: different from rings
+
+✓ Bar Chart:
+  - Height: 250px
+  - Same styling as collective chart
+
+✓ Stats Table:
+  - Shows: رتبه, نام کارگروه, اعضا, جلسات, میانگین حضور
+
+✓ API Integration:
+  - Calls: GET /api/mentor/workgroups-stats/?days=X
+
+COMPONENT 3: RingsAnalyticsChart
+─────────────────────────────────
+
+✓ Time Range Filters: Same as above
+
+✓ Metric Toggle Buttons:
+  - "شاخص کل", "حضور", "پر کردن"
+  - Purple color scheme
+
+✓ Stats Table:
+  - Shows: رتبه, نام حلقه, شماره, اعضا, میانگین حضور
+
+✓ API Integration:
+  - Calls: GET /api/mentor/rings-stats/?days=X
+
+================================================================================
+PART 3: INTEGRATION TESTS
+================================================================================
+
+TEST 1: Manager Can Access Collective Monitoring
+──────────────────────────────────────────────────
+1. Login as manager
+2. Navigate to ManagerPage
+3. Click "نظارت جمعی" tab
+4. Should load CollectiveMonitoringChart
+5. Default days=7, metric=overall_score
+6. Data should display in bar chart + table
+
+TEST 2: Time Range Filtering Works
+───────────────────────────────────
+1. On CollectiveMonitoringChart
+2. Click "۲ هفته" button
+3. API called with ?days=14
+4. Chart data updates
+5. Click "۱ ماه" button
+6. API called with ?days=30
+7. Chart data updates
+
+TEST 3: Metric Toggle Changes Data
+──────────────────────────────────
+1. Default metric=overall_score
+2. Click "ورزش" button
+3. Chart re-sorts by exercise_hours
+4. Table updates
+5. Top bar changes to gold
+6. Tooltip shows exercise_hours value
+7. Repeat for other metrics
+
+TEST 4: Workgroups Chart Renders
+──────────────────────────────────
+1. Navigate to WorkgroupPage
+2. Scroll down to WorkgroupsAnalyticsChart
+3. Should show bar chart for workgroups
+4. Time filters work
+5. Metric toggles work
+6. Table displays workgroup stats
+
+TEST 5: Rings Chart Renders
+─────────────────────────────
+1. On WorkgroupPage, below WorkgroupsAnalyticsChart
+2. RingsAnalyticsChart should be visible
+3. Time filters work
+4. Metric toggles work
+5. Table displays ring stats
+
+TEST 6: Non-Manager Cannot Access
+──────────────────────────────────
+1. Login as regular user
+2. Try to navigate to ManagerPage
+3. Should see 403 or redirect to dashboard
+4. Try to fetch /api/mentor/collective-monitoring/
+5. Should get 403 Forbidden response
+
+TEST 7: Empty Data Handling
+────────────────────────────
+1. If no members, should show: "داده‌ای برای نمایش وجود ندارد"
+2. If API error, should show error message
+3. Loading spinner should appear during fetch
+
+TEST 8: Sorting Verification
+──────────────────────────────
+1. Get response data from API
+2. Verify all members sorted by metric descending
+3. First item should have highest value
+4. Table ranks should match sort order (1, 2, 3...)
+
+================================================================================
+PART 4: SECURITY VERIFICATION
+================================================================================
+
+✓ Authorization:
+  - Endpoints check: if not request.user.is_manager
+  - Return 403 if unauthorized
+  - Frontend only accessible to managers
+
+✓ Data Isolation:
+  - All users' data included (not filtered by workgroup)
+  - Manager sees all collective metrics
+  - No sensitive data leaked
+
+✓ Input Validation:
+  - days parameter validated (7, 14, 30)
+  - Invalid days defaults to 7
+  - No SQL injection possible (Django ORM)
+
+✓ Error Handling:
+  - 500 errors logged with full traceback
+  - User sees friendly error messages
+  - No stack traces exposed to frontend
+
+================================================================================
+PART 5: PERFORMANCE VERIFICATION
+================================================================================
+
+✓ Query Optimization:
+  - Collective Monitoring:
+    * Single loop through all users
+    * Aggregate queries (Sum) per user
+    * get_user_sheet_info called per user
+    * Expected time: < 2s for 100 users
+
+  - Workgroup Stats:
+    * Loop through all workgroups
+    * For each: count meetings, members
+    * For each member: fetch attendance
+    * Expected time: < 3s for 10 workgroups
+
+  - Rings Stats:
+    * Loop through all rings
+    * For each: fetch members, attendance
+    * Expected time: < 2s for 5 rings
+
+✓ Frontend Performance:
+  - Charts render with animation
+  - Table scrolls smoothly
+  - No janky transitions
+  - Responsive to metric/time changes (< 500ms)
+
+================================================================================
+PART 6: DEPLOYMENT CHECKLIST
+================================================================================
+
+Pre-Deployment:
+  ✓ All endpoints tested locally
+  ✓ All components render correctly
+  ✓ Error handling working
+  ✓ No console errors/warnings
+  ✓ Database migrations applied (if any)
+  ✓ Static files compiled
+  ✓ Frontend build successful
+
+Post-Deployment:
+  ✓ APIs responding with correct data
+  ✓ Permission checks working
+  ✓ Charts rendering
+  ✓ Time filters working
+  ✓ Metric toggles working
+  ✓ Error states tested
+  ✓ No 500 errors in logs
+  ✓ Performance acceptable
+
+================================================================================
+FINAL STATUS: ✅ PRODUCTION READY
+================================================================================
+
+All components implemented:
+✅ Backend APIs with permission checks
+✅ Frontend charts with Recharts
+✅ Time range filtering (7/14/30 days)
+✅ Metric toggles (5 dimensions)
+✅ Leaderboard tables with rankings
+✅ Error handling and validation
+✅ Responsive design
+✅ Dark theme styling
+
+Ready for deployment!

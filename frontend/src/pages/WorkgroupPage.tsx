@@ -5,11 +5,14 @@ import {
   CheckCircle2, Circle, PlusCircle, MessageSquarePlus,
   X, Send, FileText
 } from 'lucide-react';
+import { useState, useEffect } from 'react';
 import API from '../api';
 import { SkillsAssessmentCard } from '../components/SkillsAssessmentCard';
 import { CustomFormBuilderCard } from '../components/CustomFormBuilderCard';
 import { SportsExportCard } from '../components/SportsExportCard';
 import { IslamicStudiesExportCard } from '../components/IslamicStudiesExportCard';
+import { WorkgroupsAnalyticsChart } from '../components/WorkgroupsAnalyticsChart';
+import { RingsAnalyticsChart } from '../components/RingsAnalyticsChart';
 
 interface Resolution {
   id: number;
@@ -454,6 +457,12 @@ export const WorkgroupPage: React.FC = () => {
         {userInfo?.group_code === '27214' && (
           <IslamicStudiesExportCard />
         )}
+
+        {/* ✅ Analytics Chart for Workgroups */}
+        <WorkgroupsAnalyticsChart />
+
+        {/* ✅ Analytics Chart for Rings */}
+        <RingsAnalyticsChart />
       </div>
 
       {/* مودال ثبت جلسه جدید */}

@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LogOut, Shield, Save, X, Search, Send, Bell } from 'lucide-react';
+import { useState, useEffect } from 'react';
 import API from '../api';
+import { CollectiveMonitoringChart } from '../components/CollectiveMonitoringChart';
 
 const InlineMessage: React.FC<{
   placeholder: string;
@@ -83,7 +85,7 @@ const cardStyle: React.CSSProperties = {
 
 export const ManagerPage: React.FC = () => {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<'workgroups' | 'growth' | 'rings' | 'message'>('workgroups');
+  const [activeTab, setActiveTab] = useState<'workgroups' | 'growth' | 'rings' | 'collective' | 'message'>('workgroups');
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [scores, setScores] = useState<{ [key: string]: number }>({});
@@ -198,6 +200,7 @@ export const ManagerPage: React.FC = () => {
     { id: 'workgroups', label: 'کارگروه‌ها' },
     { id: 'growth', label: 'رشد فردی' },
     { id: 'rings', label: 'حلقه‌ها' },
+    { id: 'collective', label: 'نظارت جمعی' },
     { id: 'message', label: 'پیام همگانی' },
   ];
 
@@ -249,7 +252,7 @@ export const ManagerPage: React.FC = () => {
           </button>
         </header>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.65rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.65rem' }}>
           {tabs.map((tab) => (
             <button
               key={tab.id}
@@ -627,4 +630,14 @@ const ghostBtn: React.CSSProperties = {
   gap: '0.35rem',
 };
 
+// ✅ نمایش collective tab - CollectiveMonitoringChart
+if (activeTab === 'collective') {
+  return (
+    <div style={{ width: '100%', maxWidth: '950px', display: 'flex', flexDirection: 'column', gap: '1.15rem' }}>
+      <CollectiveMonitoringChart />
+    </div>
+  );
+}
+
 export default ManagerPage;
+
