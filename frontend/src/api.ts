@@ -1,4 +1,4 @@
-import axios, { AxiosError } from 'axios';
+import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import type { AxiosResponse } from 'axios';
 
 export const API_ORIGIN = 'https://safa27.darkube.ir';
@@ -13,116 +13,99 @@ const api = axios.create({
   baseURL: `${API_ORIGIN}/api/`,
 });
 
-// ✅ Request Interceptor: Add Bearer Token
+type RetryableRequestConfig = InternalAxiosRequestConfig & {
+  _retry?: boolean;
+};
+
+function clearStoredAuth(): void {
+  localStorage.removeItem('access_token');
+  localStorage.removeItem('refresh_token');
+  localStorage.removeItem('user_info');
+}
+
+function redirectToLogin(): void {
+  if (window.location.pathname === '/login') return;
+  window.location.href = `/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`;
+}
+
+// Add the current access token to every protected API request.
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('access_token');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
+  } else {
+    delete config.headers.Authorization;
   }
   return config;
 });
 
-// ✅ Response Interceptor: Handle 401 + Token Refresh
-let isRefreshing = false;
-let refreshSubscribers: Array<(token: string) => void> = [];
-
-const onRefreshed = (token: string) => {
-  refreshSubscribers.forEach((callback) => callback(token));
-  refreshSubscribers = [];
-};
-
-const addRefreshSubscriber = (callback: (token: string) => void) => {
-  refreshSubscribers.push(callback);
-};
+// A single shared refresh promise prevents concurrent 401 responses from
+// triggering multiple refresh requests and rotating the same refresh token.
+let refreshPromise: Promise<string> | null = null;
 
 api.interceptors.response.use(
   (response: AxiosResponse) => response,
   async (error: AxiosError) => {
-    const originalRequest = error.config as any;
+    const originalRequest = error.config as RetryableRequestConfig | undefined;
+    const requestUrl = originalRequest?.url || '';
 
-    // اگر status 401 و هنوز refresh نکردیم
-    if (error.response?.status === 401 && !originalRequest._retry) {
-      if (isRefreshing) {
-        // اگر refresh در حال انجام است، منتظر بمان
-        return new Promise((resolve) => {
-          addRefreshSubscriber((token: string) => {
-            originalRequest.headers.Authorization = `Bearer ${token}`;
-            resolve(api(originalRequest));
-          });
-        });
-      }
-
-      originalRequest._retry = true;
-      isRefreshing = true;
-
-      try {
-        const refreshToken = localStorage.getItem('refresh_token');
-
-        if (!refreshToken) {
-          throw new Error('No refresh token available');
-        }
-
-        // درخواست token جدید
-        const refreshResponse = await axios.post(
-          `${API_ORIGIN}/api/auth/refresh/`,
-          { refresh: refreshToken }
-        );
-
-        const newAccessToken = refreshResponse.data?.access;
-
-        if (newAccessToken) {
-          // ذخیره token جدید
-          localStorage.setItem('access_token', newAccessToken);
-
-          // بروزرسانی header
-          originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
-
-          // اطلاع به subscribers
-          onRefreshed(newAccessToken);
-
-          isRefreshing = false;
-
-          // دوباره درخواست اصلی
-          return api(originalRequest);
-        } else {
-          throw new Error('No access token in refresh response');
-        }
-      } catch (refreshError: any) {
-        // Token refresh ناموفق - Logout
-        console.error('[API] Token refresh failed:', refreshError.message);
-
-        // پاک‌کردن tokens
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('refresh_token');
-        localStorage.removeItem('user_info');
-
-        isRefreshing = false;
-        refreshSubscribers = [];
-
-        // هدایت به login
-        window.location.href = `/login?next=${encodeURIComponent(window.location.pathname)}`;
-
-        return Promise.reject(refreshError);
-      }
-    }
-
-    // اگر 401 است و هنوز retry نشده، یا خطای دیگری است
-    if (error.response?.status === 401) {
-      // پاک‌کردن tokens
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('refresh_token');
-      localStorage.removeItem('user_info');
-
-      isRefreshing = false;
-      refreshSubscribers = [];
-
-      // هدایت به login
-      window.location.href = `/login?next=${encodeURIComponent(window.location.pathname)}`;
-
+    // Never try to refresh a failed login or refresh request.
+    if (
+      error.response?.status !== 401 ||
+      !originalRequest ||
+      requestUrl.includes('auth/login/') ||
+      requestUrl.includes('auth/refresh/') ||
+      requestUrl.includes('auth/logout/')
+    ) {
       return Promise.reject(error);
     }
 
-    return Promise.reject(error);
+    if (originalRequest._retry) {
+      clearStoredAuth();
+      redirectToLogin();
+      return Promise.reject(error);
+    }
+
+    const refreshToken = localStorage.getItem('refresh_token');
+    if (!refreshToken) {
+      clearStoredAuth();
+      redirectToLogin();
+      return Promise.reject(error);
+    }
+
+    originalRequest._retry = true;
+
+    try {
+      if (!refreshPromise) {
+        refreshPromise = axios
+          .post(`${API_ORIGIN}/api/auth/refresh/`, { refresh: refreshToken })
+          .then((response) => {
+            const newAccessToken = response.data?.access;
+            const newRefreshToken = response.data?.refresh;
+
+            if (!newAccessToken) {
+              throw new Error('Refresh response did not contain an access token.');
+            }
+
+            localStorage.setItem('access_token', newAccessToken);
+            if (newRefreshToken) {
+              localStorage.setItem('refresh_token', newRefreshToken);
+            }
+            return newAccessToken as string;
+          })
+          .finally(() => {
+            refreshPromise = null;
+          });
+      }
+
+      const newAccessToken = await refreshPromise;
+      originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
+      return api(originalRequest);
+    } catch (refreshError) {
+      clearStoredAuth();
+      redirectToLogin();
+      return Promise.reject(refreshError);
+    }
   }
 );
 
