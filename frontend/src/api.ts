@@ -1,4 +1,5 @@
-import axios, { AxiosError, AxiosResponse } from 'axios';
+import axios, { AxiosError } from 'axios';
+import type { AxiosResponse } from 'axios';
 
 export const API_ORIGIN = 'https://safa27.darkube.ir';
 

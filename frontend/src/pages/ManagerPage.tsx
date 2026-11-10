@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LogOut, Shield, Save, X, Search, Send, Bell } from 'lucide-react';
 import { useState, useEffect } from 'react';
@@ -416,6 +416,10 @@ export const ManagerPage: React.FC = () => {
           </div>
         )}
 
+        {!loading && activeTab === 'collective' && (
+          <CollectiveMonitoringChart />
+        )}
+
         {!loading && activeTab === 'message' && (
           <div style={cardStyle}>
             <h2 style={{ fontSize: '1.12rem', fontWeight: 800, color: '#facc15', margin: '0 0 0.35rem', display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
@@ -629,15 +633,6 @@ const ghostBtn: React.CSSProperties = {
   alignItems: 'center',
   gap: '0.35rem',
 };
-
-// ✅ نمایش collective tab - CollectiveMonitoringChart
-if (activeTab === 'collective') {
-  return (
-    <div style={{ width: '100%', maxWidth: '950px', display: 'flex', flexDirection: 'column', gap: '1.15rem' }}>
-      <CollectiveMonitoringChart />
-    </div>
-  );
-}
 
 export default ManagerPage;
 

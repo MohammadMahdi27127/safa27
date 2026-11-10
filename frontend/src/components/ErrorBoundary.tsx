@@ -1,4 +1,5 @@
-import React, { ReactNode, ReactElement } from 'react';
+import React from 'react';
+import type { ReactNode } from 'react';
 import { AlertTriangle, RefreshCw, LogOut } from 'lucide-react';
 
 interface Props {
@@ -122,7 +123,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
             </p>
 
             {/* Error Details (dev only) */}
-            {process.env.NODE_ENV === 'development' && this.state.error && (
+            {import.meta.env.DEV && this.state.error && (
               <div style={{
                 margin: '1rem 0',
                 padding: '1rem',

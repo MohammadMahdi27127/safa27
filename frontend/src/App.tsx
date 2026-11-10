@@ -10,7 +10,6 @@ import { ManagerPage } from "./pages/ManagerPage";
 import { FormManagerPage } from "./pages/FormManagerPage";
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './hooks/useAuth';
 
 /**

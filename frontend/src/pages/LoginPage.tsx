@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Shield, Star, Eye, EyeOff, Lock, CheckCircle2 } from 'lucide-react';
 import API from '../api';
 import { useNavigate, useSearchParams } from 'react-router-dom';

@@ -49,7 +49,7 @@ export const CustomFormCard: React.FC<CustomFormCardProps> = ({ form, onSuccess 
     setSuccessMessage(null);
 
     try {
-      const response = await API.post(`/api/custom-forms/${form.id}/submit/`, {
+      await API.post(`/api/custom-forms/${form.id}/submit/`, {
         answers,
       });
 
