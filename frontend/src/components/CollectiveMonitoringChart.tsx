@@ -25,7 +25,7 @@ export const CollectiveMonitoringChart: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await API.get(`/api/mentor/collective-monitoring/?days=${selectedDays}`);
+      const res = await API.get(`/mentor/collective-monitoring/?days=${selectedDays}`);
       if (res.data?.members) {
         // ✅ Sort by selected metric descending
         const sorted = [...res.data.members].sort((a, b) => b[metric] - a[metric]);

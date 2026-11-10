@@ -24,7 +24,7 @@ export const WorkgroupsAnalyticsChart: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await API.get(`/api/mentor/workgroups-stats/?days=${selectedDays}`);
+      const res = await API.get(`/mentor/workgroups-stats/?days=${selectedDays}`);
       if (res.data?.workgroups) {
         const sorted = [...res.data.workgroups].sort((a, b) => b[metric] - a[metric]);
         setWorkgroups(sorted);

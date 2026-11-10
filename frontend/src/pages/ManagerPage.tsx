@@ -109,6 +109,10 @@ export const ManagerPage: React.FC = () => {
       loadTargets();
       return;
     }
+    if (activeTab === 'collective') {
+      setLoading(false);
+      return;
+    }
     fetchTabData(activeTab);
   }, [activeTab]);
 

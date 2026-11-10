@@ -24,7 +24,7 @@ export const RingsAnalyticsChart: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await API.get(`/api/mentor/rings-stats/?days=${selectedDays}`);
+      const res = await API.get(`/mentor/rings-stats/?days=${selectedDays}`);
       if (res.data?.rings) {
         const sorted = [...res.data.rings].sort((a, b) => b[metric] - a[metric]);
         setRings(sorted);
