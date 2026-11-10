@@ -110,8 +110,10 @@ class CustomLoginView(views.APIView):
 
 
 class CustomLogoutView(views.APIView):
-    """Blacklist the current user's refresh token so it cannot be used again."""
-    permission_classes = [IsAuthenticated]
+    """Blacklist the presented refresh token; possession of it is required."""
+    # Logout must still work when the access token has expired.
+    permission_classes = [AllowAny]
+    authentication_classes = []
 
     def post(self, request):
         refresh_token = request.data.get('refresh')
@@ -123,11 +125,6 @@ class CustomLogoutView(views.APIView):
 
         try:
             token = RefreshToken(refresh_token)
-            if str(token.get('user_id')) != str(request.user.pk):
-                return Response(
-                    {'error': 'توکن متعلق به این کاربر نیست.'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
             token.blacklist()
         except TokenError:
             return Response(
