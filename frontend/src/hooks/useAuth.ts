@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import API from '../api';
+import axios from 'axios';
+import API, { API_ORIGIN } from '../api';
 
 interface User {
   id: number;
@@ -96,7 +97,7 @@ export const useAuth = (): UseAuthReturn => {
 
     // Keep credentials available until the authenticated logout request has
     // been sent; local cleanup happens whether the server call succeeds or not.
-    void API.post('/auth/logout/', { refresh: refreshToken })
+    void axios.post(`${API_ORIGIN}/api/auth/logout/`, { refresh: refreshToken })
       .catch((err) => {
         console.error('[useAuth] Server-side logout failed:', err);
       })
