@@ -27,14 +27,14 @@ export const LoginPage: React.FC = () => {
         password: password,
       });
 
-      if (response.data?.access) {
+      if (response.data?.access && response.data?.refresh && response.data?.user) {
         localStorage.setItem('access_token', response.data.access);
         localStorage.setItem('refresh_token', response.data.refresh);
         const user = response.data.user;
         localStorage.setItem('user_info', JSON.stringify(user));
 
         // ✅ Redirect to 'next' param if available, otherwise default
-        if (redirectTarget && redirectTarget.startsWith('/')) {
+        if (redirectTarget.startsWith('/') && !redirectTarget.startsWith('//')) {
           navigate(redirectTarget, { replace: true });
         } else if (user.is_manager) {
           navigate('/manager', { replace: true });

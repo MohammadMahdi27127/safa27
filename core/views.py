@@ -1,8 +1,13 @@
 ﻿from datetime import timedelta
 from django.utils import timezone
+from django.contrib.auth import authenticate
+from django.core.exceptions import ValidationError
+from django.contrib.auth.password_validation import validate_password
 from rest_framework import views, status, generics
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.throttling import ScopedRateThrottle
+from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework_simplejwt.tokens import RefreshToken
 import jdatetime
@@ -67,27 +72,29 @@ def collect_media_images(request):
 
 class CustomLoginView(views.APIView):
     permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'login'
 
     def post(self, request):
-        group_code = request.data.get('group_code', '').strip()
-        password = request.data.get('password', '')
+        group_code = str(request.data.get('group_code') or '').strip()
+        password = request.data.get('password') or ''
 
-        if not group_code or not password:
-            return Response({'error': 'کد گروهی و رمز عبور الزامی است.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not group_code or not isinstance(password, str) or not password:
+            return Response(
+                {'error': 'کد گروهی و رمز عبور الزامی است.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-        try:
-            user = User.objects.get(group_code=group_code)
-        except User.DoesNotExist:
-            return Response({'error': 'کاربر یافت نشد.'}, status=status.HTTP_401_UNAUTHORIZED)
-
-        if not user.check_password(password):
-            return Response({'error': 'رمز عبور اشتباه است.'}, status=status.HTTP_401_UNAUTHORIZED)
-
-        if not user.is_active:
-            return Response({'error': 'حساب کاربری غیرفعال است.'}, status=status.HTTP_403_FORBIDDEN)
+        # The custom backend checks the password and rejects inactive users.
+        # A generic error avoids revealing whether a group code exists.
+        user = authenticate(request, group_code=group_code, password=password)
+        if user is None:
+            return Response(
+                {'error': 'کد گروهی یا رمز عبور نادرست است یا حساب غیرفعال است.'},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
 
         refresh = RefreshToken.for_user(user)
-
         return Response({
             'refresh': str(refresh),
             'access': str(refresh.access_token),
@@ -100,6 +107,32 @@ class CustomLoginView(views.APIView):
                 'is_workgroup_leader': user.is_workgroup_leader,
             }
         }, status=status.HTTP_200_OK)
+
+
+class CustomLogoutView(views.APIView):
+    """Blacklist the presented refresh token; possession of it is required."""
+    # Logout must still work when the access token has expired.
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def post(self, request):
+        refresh_token = request.data.get('refresh')
+        if not refresh_token:
+            return Response(
+                {'error': 'توکن تمدید الزامی است.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            token = RefreshToken(refresh_token)
+            token.blacklist()
+        except TokenError:
+            return Response(
+                {'error': 'توکن تمدید نامعتبر یا قبلاً باطل شده است.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        return Response({'message': 'خروج با موفقیت انجام شد.'}, status=status.HTTP_200_OK)
 
 
 class DashboardView(views.APIView):
@@ -213,12 +246,29 @@ class ChangePasswordView(views.APIView):
         if not user.check_password(current_password):
             return Response({'error': 'رمز عبور فعلی نادرست است.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        if len(new_password) < 4:
-            return Response({'error': 'رمز عبور باید حداقل ۴ کاراکتر باشد.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            validate_password(new_password, user=user)
+        except ValidationError as exc:
+            return Response(
+                {'error': exc.messages},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
         user.set_password(new_password)
-        user.save()
-        return Response({'message': 'رمز عبور با موفقیت تغییر کرد.'}, status=status.HTTP_200_OK)
+        user.save(update_fields=['password'])
+
+        # Revoke all refresh tokens after a password change.
+        from rest_framework_simplejwt.token_blacklist.models import (
+            BlacklistedToken, OutstandingToken
+        )
+        outstanding_tokens = OutstandingToken.objects.filter(user=user)
+        for outstanding_token in outstanding_tokens:
+            BlacklistedToken.objects.get_or_create(token=outstanding_token)
+
+        return Response(
+            {'message': 'رمز عبور با موفقیت تغییر کرد. لطفاً دوباره وارد شوید.'},
+            status=status.HTTP_200_OK
+        )
 
 
 class PersonalGrowthView(views.APIView):
