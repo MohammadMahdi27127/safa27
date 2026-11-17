@@ -52,9 +52,19 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
 
 
 class UserRingMemberSerializer(serializers.ModelSerializer):
+    avatar_url = serializers.SerializerMethodField()
+
     class Meta:
         model = User
-        fields = ['id', 'full_name', 'avatar']
+        fields = ['id', 'group_code', 'full_name', 'avatar', 'avatar_url']
+
+    def get_avatar_url(self, obj):
+        if not obj.avatar:
+            return None
+        request = self.context.get('request')
+        if request is not None:
+            return request.build_absolute_uri(obj.avatar.url)
+        return f"https://safa27.darkube.ir{obj.avatar.url}"
 
 
 class PublicArchiveSerializer(serializers.ModelSerializer):
@@ -194,3 +204,23 @@ class CustomFormResponseSerializer(serializers.ModelSerializer):
         if not isinstance(value, dict):
             raise serializers.ValidationError("پاسخ‌ها باید به صورت فیلدهای key-value باشند.")
         return value
+    
+class UserSerializer(serializers.ModelSerializer):
+    avatar_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = [
+            'id', 'group_code', 'full_name', 'avatar', 'avatar_url',
+            'is_manager', 'is_resolution_officer', 'is_workgroup_leader',
+            'ring', 'workgroup'
+        ]
+
+    def get_avatar_url(self, obj):
+        if not obj.avatar:
+            return None
+        request = self.context.get('request')
+        if request is not None:
+            return request.build_absolute_uri(obj.avatar.url)
+        # آدرس واقعی بک‌اند خودت در دارکوب را جایگزین کن
+        return f"https://safa27.darkube.ir{obj.avatar.url}"
